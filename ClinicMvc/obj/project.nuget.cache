@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "1ASMeIC8iZ8=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Slave\\Desktop\\ClinicMvc2\\ClinicMvc\\ClinicMvc.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Slave\\.nuget\\packages\\dapper\\2.1.35\\dapper.2.1.35.nupkg.sha512",
+    "C:\\Users\\Slave\\.nuget\\packages\\firebirdsql.data.firebirdclient\\10.3.1\\firebirdsql.data.firebirdclient.10.3.1.nupkg.sha512"
+  ],
+  "logs": []
+}

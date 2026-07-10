@@ -1,0 +1,47 @@
+@model AppointmentIndexViewModel
+@{
+    ViewData["Title"] = "Термини";
+}
+
+<h1>Термини</h1>
+
+<form asp-action="Index" method="get" class="filter-bar">
+    <div class="filter-field">
+        <label asp-for="Filter.DoctorId">Лекар</label>
+        <select asp-for="Filter.DoctorId" asp-items="Model.Doctors">
+            <option value="">-- Сите --</option>
+        </select>
+    </div>
+
+    <div class="filter-field">
+        <label asp-for="Filter.Specialty">Специјалност</label>
+        <select asp-for="Filter.Specialty" asp-items="Model.Specialties">
+            <option value="">-- Сите --</option>
+        </select>
+    </div>
+
+    <div class="filter-field">
+        <label asp-for="Filter.Status">Статус на термин</label>
+        <select asp-for="Filter.Status" asp-items="Model.Statuses">
+            <option value="">-- Сите --</option>
+        </select>
+    </div>
+
+    <div class="filter-field">
+        <label asp-for="Filter.DateFrom">Од</label>
+        <input asp-for="Filter.DateFrom" type="date" />
+    </div>
+
+    <div class="filter-field">
+        <label asp-for="Filter.DateTo">До</label>
+        <input asp-for="Filter.DateTo" type="date" />
+    </div>
+
+    <div class="filter-actions">
+        <button type="submit">🔍 Пребарај</button>
+        <a asp-action="Create" class="btn">+ Нов термин</a>
+    </div>
+</form>
+
+@* Partial View за табеларен приказ на термините *@
+@await Html.PartialAsync("_AppointmentsTable", Model.Appointments)

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="mk">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Медицинска клиника</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header>
+        <nav class="navbar">
+            <a class="brand" asp-controller="Home" asp-action="Index">Клиника</a>
+            <a asp-controller="Doctors" asp-action="Index">Доктори</a>
+            <a asp-controller="Patients" asp-action="Index">Пациенти</a>
+            <a asp-controller="Appointments" asp-action="Index">Термини</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        @RenderBody()
+    </main>
+</body>
+</html>

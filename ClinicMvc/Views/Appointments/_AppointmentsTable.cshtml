@@ -1,0 +1,45 @@
+@model IEnumerable<Appointment>
+
+<table>
+    <thead>
+        <tr>
+            <th>Датум</th>
+            <th>Време</th>
+            <th>Пациент</th>
+            <th>Лекар</th>
+            <th>Специјалност</th>
+            <th>Статус</th>
+            <th>Акции</th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (!Model.Any())
+        {
+            <tr>
+                <td colspan="7">Нема термини кои одговараат на избраните филтри.</td>
+            </tr>
+        }
+        else
+        {
+            @foreach (var appointment in Model)
+            {
+                <tr>
+                    <td>@appointment.AppointmentDate.ToString("dd.MM.yyyy")</td>
+                    <td>@appointment.AppointmentTime.ToString(@"hh\:mm")</td>
+                    <td>@appointment.PatientName</td>
+                    <td>@appointment.DoctorName</td>
+                    <td>@appointment.DoctorSpecialty</td>
+                    <td>
+                        <span class="status-badge status-@appointment.Status?.Replace(" ", "-").ToLower()">
+                            @appointment.Status
+                        </span>
+                    </td>
+                    <td class="actions">
+                        <a asp-action="Edit" asp-route-id="@appointment.Id" class="btn-action btn-edit">Измени</a>
+                        <a asp-action="Delete" asp-route-id="@appointment.Id" class="btn-action btn-delete">Избриши</a>
+                    </td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>

@@ -1,0 +1,23 @@
+@model Appointment
+@{
+    ViewData["Title"] = "Избриши термин";
+}
+
+<h1>Дали сте сигурни дека сакате да го избришете овој термин?</h1>
+
+<dl>
+    <dt>Датум</dt>
+    <dd>@Model.AppointmentDate.ToString("dd.MM.yyyy")</dd>
+    <dt>Лекар</dt>
+    <dd>@Model.DoctorName</dd>
+    <dt>Пациент</dt>
+    <dd>@Model.PatientName</dd>
+    <dt>Статус</dt>
+    <dd>@Model.Status</dd>
+</dl>
+
+<form asp-action="Delete" method="post">
+    <input type="hidden" asp-for="Id" />
+    <button type="submit" class="btn-delete">Избриши</button>
+    <a asp-action="Index">Откажи</a>
+</form>

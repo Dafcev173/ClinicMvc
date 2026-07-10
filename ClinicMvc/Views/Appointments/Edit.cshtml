@@ -1,0 +1,32 @@
+@model Appointment
+@{
+    ViewData["Title"] = "Измени термин";
+}
+
+<h1>Измени термин</h1>
+
+<form asp-action="Edit" method="post">
+    <input type="hidden" asp-for="Id" />
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <label asp-for="DoctorId">Лекар</label>
+    <select asp-for="DoctorId" asp-items="(IEnumerable<SelectListItem>)ViewBag.Doctors"></select>
+
+    <label asp-for="PatientId">Пациент</label>
+    <select asp-for="PatientId" asp-items="(IEnumerable<SelectListItem>)ViewBag.Patients"></select>
+
+    <label asp-for="AppointmentDate">Датум</label>
+    <input asp-for="AppointmentDate" type="date" />
+
+    <label asp-for="AppointmentTime">Време</label>
+    <input asp-for="AppointmentTime" type="time" />
+
+    <label asp-for="Status">Статус</label>
+    <select asp-for="Status" asp-items="(IEnumerable<SelectListItem>)ViewBag.Statuses"></select>
+
+    <label asp-for="Notes">Белешки</label>
+    <input asp-for="Notes" />
+
+    <button type="submit">Зачувај</button>
+    <a asp-action="Index">Откажи</a>
+</form>

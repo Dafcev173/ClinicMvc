@@ -1,0 +1,19 @@
+@model Doctor
+@{
+    ViewData["Title"] = "Избриши доктор";
+}
+
+<h1>Дали сте сигурни дека сакате да го избришете овој доктор?</h1>
+
+<dl>
+    <dt>Име</dt>
+    <dd>@Model.FirstName @Model.LastName</dd>
+    <dt>Специјалност</dt>
+    <dd>@Model.Specialty</dd>
+</dl>
+
+<form asp-action="Delete" method="post">
+    <input type="hidden" asp-for="Id" />
+    <button type="submit">Избриши</button>
+    <a asp-action="Index">Откажи</a>
+</form>

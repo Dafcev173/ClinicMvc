@@ -1,0 +1,30 @@
+@model IEnumerable<Patient>
+@{
+    ViewData["Title"] = "Пациенти";
+}
+
+<h1>Пациенти</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>Име</th>
+            <th>Презиме</th>
+            <th>ЕМБГ</th>
+            <th>Телефон</th>
+            <th>Е-пошта</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var patient in Model)
+        {
+            <tr>
+                <td>@patient.FirstName</td>
+                <td>@patient.LastName</td>
+                <td>@patient.Embg</td>
+                <td>@patient.Phone</td>
+                <td>@patient.Email</td>
+            </tr>
+        }
+    </tbody>
+</table>

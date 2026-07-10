@@ -1,0 +1,32 @@
+@model Doctor
+@{
+    ViewData["Title"] = "Измени доктор";
+}
+
+<h1>Измени доктор</h1>
+
+<form asp-action="Edit" method="post">
+    <input type="hidden" asp-for="Id" />
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <label asp-for="FirstName"></label>
+    <input asp-for="FirstName" />
+    <span asp-validation-for="FirstName"></span>
+
+    <label asp-for="LastName"></label>
+    <input asp-for="LastName" />
+    <span asp-validation-for="LastName"></span>
+
+    <label asp-for="Specialty"></label>
+    <input asp-for="Specialty" />
+
+    <label asp-for="Phone"></label>
+    <input asp-for="Phone" />
+
+    <label>
+        <input asp-for="IsActive" /> @Html.DisplayNameFor(m => m.IsActive)
+    </label>
+
+    <button type="submit">Зачувај</button>
+    <a asp-action="Index">Откажи</a>
+</form>
