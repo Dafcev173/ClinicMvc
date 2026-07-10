@@ -7,7 +7,7 @@ public class Doctor
     public int Id { get; set; }
 
     [Required(ErrorMessage = "Името е задолжително")]
-    [Display(Name = "Име")]
+    [Display(Name = "Ime")]
     public string FirstName { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Презимето е задолжително")]
@@ -22,4 +22,7 @@ public class Doctor
 
     [Display(Name = "Активен")]
     public bool IsActive { get; set; } = true;
+
+    // Пресметано поле — не се зачувува во база
+    public string FullName => $"{FirstName} {LastName}";
 }

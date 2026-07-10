@@ -1,7 +1,7 @@
 @model IEnumerable<Appointment>
 
-<table>
-    <thead>
+<table class="table table-bordered table-hover">
+    <thead class="table-dark">
         <tr>
             <th>Датум</th>
             <th>Време</th>
@@ -16,27 +16,37 @@
         @if (!Model.Any())
         {
             <tr>
-                <td colspan="7">Нема термини кои одговараат на избраните филтри.</td>
+                <td colspan="7" class="text-center text-muted">Нема термини.</td>
             </tr>
         }
         else
         {
-            @foreach (var appointment in Model)
+            @foreach (var a in Model)
             {
-                <tr>
-                    <td>@appointment.AppointmentDate.ToString("dd.MM.yyyy")</td>
-                    <td>@appointment.AppointmentTime.ToString(@"hh\:mm")</td>
-                    <td>@appointment.PatientName</td>
-                    <td>@appointment.DoctorName</td>
-                    <td>@appointment.DoctorSpecialty</td>
+                <tr id="appointment-row-@a.Id">
+                    <td>@a.AppointmentDate.ToString("dd.MM.yyyy")</td>
+                    <td>@a.AppointmentTime.ToString(@"hh\:mm")</td>
+                    <td>@a.PatientName</td>
+                    <td>@a.DoctorName</td>
+                    <td>@a.DoctorSpecialty</td>
                     <td>
-                        <span class="status-badge status-@appointment.Status?.Replace(" ", "-").ToLower()">
-                            @appointment.Status
-                        </span>
+                        @{
+                            var badgeClass = a.Status switch
+                            {
+                                "Zakazan"  => "bg-primary",
+                                "Vo tek"   => "bg-success",
+                                "Zavrsen"  => "bg-secondary",
+                                "Otkazen"  => "bg-danger",
+                                _          => "bg-light text-dark"
+                            };
+                        }
+                        <span class="badge @badgeClass">@a.Status</span>
                     </td>
-                    <td class="actions">
-                        <a asp-action="Edit" asp-route-id="@appointment.Id" class="btn-action btn-edit">Измени</a>
-                        <a asp-action="Delete" asp-route-id="@appointment.Id" class="btn-action btn-delete">Избриши</a>
+                    <td>
+                        <button class="btn btn-sm btn-warning"
+                                onclick="openEditModal(@a.Id)">Измени</button>
+                        <button class="btn btn-sm btn-danger"
+                                onclick="deleteAppointment(@a.Id)">Избриши</button>
                     </td>
                 </tr>
             }

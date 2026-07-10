@@ -3,45 +3,288 @@
     ViewData["Title"] = "Термини";
 }
 
-<h1>Термини</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Термини</h2>
+    <button class="btn btn-primary" onclick="openCreateModal()">+ Нов термин</button>
+</div>
 
-<form asp-action="Index" method="get" class="filter-bar">
-    <div class="filter-field">
-        <label asp-for="Filter.DoctorId">Лекар</label>
-        <select asp-for="Filter.DoctorId" asp-items="Model.Doctors">
-            <option value="">-- Сите --</option>
-        </select>
-    </div>
-
-    <div class="filter-field">
-        <label asp-for="Filter.Specialty">Специјалност</label>
-        <select asp-for="Filter.Specialty" asp-items="Model.Specialties">
-            <option value="">-- Сите --</option>
-        </select>
-    </div>
-
-    <div class="filter-field">
-        <label asp-for="Filter.Status">Статус на термин</label>
-        <select asp-for="Filter.Status" asp-items="Model.Statuses">
-            <option value="">-- Сите --</option>
-        </select>
-    </div>
-
-    <div class="filter-field">
-        <label asp-for="Filter.DateFrom">Од</label>
-        <input asp-for="Filter.DateFrom" type="date" />
-    </div>
-
-    <div class="filter-field">
-        <label asp-for="Filter.DateTo">До</label>
-        <input asp-for="Filter.DateTo" type="date" />
-    </div>
-
-    <div class="filter-actions">
-        <button type="submit">🔍 Пребарај</button>
-        <a asp-action="Create" class="btn">+ Нов термин</a>
+{{-- Филтри --}}
+<form id="filterForm" class="card card-body mb-3">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label">Лекар</label>
+            <select name="DoctorId" class="form-select">
+                <option value="">-- Сите --</option>
+                @foreach (var d in Model.Doctors)
+                {
+                    if (Model.Filter.DoctorId?.ToString() == d.Value)
+                    {
+                        <option value="@d.Value" selected>@d.Text</option>
+                    }
+                    else
+                    {
+                        <option value="@d.Value">@d.Text</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Специјалност</label>
+            <select name="Specialty" class="form-select">
+                <option value="">-- Сите --</option>
+                @foreach (var s in Model.Specialties)
+                {
+                    if (Model.Filter.Specialty == s.Value)
+                    {
+                        <option value="@s.Value" selected>@s.Text</option>
+                    }
+                    else
+                    {
+                        <option value="@s.Value">@s.Text</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Статус</label>
+            <select name="Status" class="form-select">
+                <option value="">-- Сите --</option>
+                @foreach (var s in Model.Statuses)
+                {
+                    if (Model.Filter.Status == s.Value)
+                    {
+                        <option value="@s.Value" selected>@s.Text</option>
+                    }
+                    else
+                    {
+                        <option value="@s.Value">@s.Text</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Од</label>
+            <input type="date" name="DateFrom" class="form-control"
+                   value="@Model.Filter.DateFrom?.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">До</label>
+            <input type="date" name="DateTo" class="form-control"
+                   value="@Model.Filter.DateTo?.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-secondary w-100">🔍 Пребарај</button>
+        </div>
     </div>
 </form>
 
-@* Partial View за табеларен приказ на термините *@
+@* Partial View за табелата *@
 @await Html.PartialAsync("_AppointmentsTable", Model.Appointments)
+
+@* ── Модал: Нов / Измени термин ── *@
+<div class="modal fade" id="appointmentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="appointmentModalTitle">Нов термин</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="appointmentForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="appointmentId" name="Id" value="0" />
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Лекар <span class="text-danger">*</span></label>
+                            <select class="form-select" id="doctorId" name="DoctorId" required>
+                                <option value="">-- Избери лекар --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Пациент <span class="text-danger">*</span></label>
+                            <select class="form-select" id="patientId" name="PatientId" required>
+                                <option value="">-- Избери пациент --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Датум <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="appointmentDate"
+                                   name="AppointmentDate" required />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Време <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="appointmentTime"
+                                   name="AppointmentTime" required />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Статус</label>
+                        <select class="form-select" id="status" name="Status"></select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Белешки</label>
+                        <textarea class="form-control" id="notes" name="Notes" rows="2"></textarea>
+                    </div>
+
+                    <div id="appointmentFormErrors" class="alert alert-danger d-none"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Откажи</button>
+                <button type="button" class="btn btn-primary" onclick="saveAppointment()">Зачувај</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Модал: Потврда за бришење ── *@
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Избриши термин</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Дали сте сигурни дека сакате да го избришете овој термин?</p>
+                <form id="deleteForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="deleteAppointmentId" value="0" />
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Откажи</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDelete()">Избриши</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const appointmentModal = new bootstrap.Modal(document.getElementById('appointmentModal'));
+const deleteModal      = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+let dropdowns = { doctors: [], patients: [], statuses: [] };
+
+// Вчитај dropdown податоци еднаш при вчитување на страницата
+$.get('/Appointments/GetDropdowns', function(data) {
+    dropdowns = data;
+});
+
+function fillDropdowns(selectedDoctorId, selectedPatientId, selectedStatus) {
+    const doctorSel  = document.getElementById('doctorId');
+    const patientSel = document.getElementById('patientId');
+    const statusSel  = document.getElementById('status');
+
+    doctorSel.innerHTML  = '<option value="">-- Избери лекар --</option>';
+    patientSel.innerHTML = '<option value="">-- Избери пациент --</option>';
+    statusSel.innerHTML  = '';
+
+    dropdowns.doctors.forEach(d => {
+        const opt = new Option(d.name, d.id, false, d.id == selectedDoctorId);
+        doctorSel.appendChild(opt);
+    });
+
+    dropdowns.patients.forEach(p => {
+        const opt = new Option(p.name, p.id, false, p.id == selectedPatientId);
+        patientSel.appendChild(opt);
+    });
+
+    dropdowns.statuses.forEach(s => {
+        const opt = new Option(s, s, false, s === selectedStatus);
+        statusSel.appendChild(opt);
+    });
+}
+
+function openCreateModal() {
+    document.getElementById('appointmentModalTitle').textContent = 'Нов термин';
+    document.getElementById('appointmentId').value   = '0';
+    document.getElementById('appointmentDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('appointmentTime').value = '';
+    document.getElementById('notes').value           = '';
+    document.getElementById('appointmentFormErrors').classList.add('d-none');
+    fillDropdowns(0, 0, dropdowns.statuses?.[0]);
+    appointmentModal.show();
+}
+
+function openEditModal(id) {
+    $.get(`/Appointments/GetById/${id}`, function(a) {
+        document.getElementById('appointmentModalTitle').textContent = 'Измени термин';
+        document.getElementById('appointmentId').value   = a.id;
+        document.getElementById('appointmentDate').value = a.appointmentDate?.split('T')[0];
+        document.getElementById('appointmentTime').value = a.appointmentTime?.substring(0, 5);
+        document.getElementById('notes').value           = a.notes || '';
+        document.getElementById('appointmentFormErrors').classList.add('d-none');
+        fillDropdowns(a.doctorId, a.patientId, a.status);
+        appointmentModal.show();
+    });
+}
+
+function saveAppointment() {
+    const id    = document.getElementById('appointmentId').value;
+    const url   = id === '0' ? '/Appointments/Create' : '/Appointments/Edit';
+    const token = document.querySelector('#appointmentForm input[name="__RequestVerificationToken"]').value;
+
+    // Client-side: датумот не смее да биде во минатото
+    const selectedDate = new Date(document.getElementById('appointmentDate').value);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (selectedDate < today) {
+        showError('Не може да се закаже термин за минат датум.');
+        return;
+    }
+
+    const data = {
+        Id:              id,
+        DoctorId:        document.getElementById('doctorId').value,
+        PatientId:       document.getElementById('patientId').value,
+        AppointmentDate: document.getElementById('appointmentDate').value,
+        AppointmentTime: document.getElementById('appointmentTime').value,
+        Status:          document.getElementById('status').value,
+        Notes:           document.getElementById('notes').value,
+        __RequestVerificationToken: token
+    };
+
+    $.post(url, data)
+        .done(function() {
+            appointmentModal.hide();
+            location.reload();
+        })
+        .fail(function(xhr) {
+            const response = xhr.responseJSON;
+            showError(response?.errors?.join('<br>') || 'Грешка при зачувување.');
+        });
+}
+
+function showError(msg) {
+    const errDiv = document.getElementById('appointmentFormErrors');
+    errDiv.innerHTML = msg;
+    errDiv.classList.remove('d-none');
+}
+
+function deleteAppointment(id) {
+    document.getElementById('deleteAppointmentId').value = id;
+    deleteModal.show();
+}
+
+function confirmDelete() {
+    const id    = document.getElementById('deleteAppointmentId').value;
+    const token = document.querySelector('#deleteForm input[name="__RequestVerificationToken"]').value;
+
+    $.post('/Appointments/Delete', { id: id, __RequestVerificationToken: token })
+        .done(function() {
+            deleteModal.hide();
+            $(`#appointment-row-${id}`).fadeOut(300, function() { $(this).remove(); });
+        })
+        .fail(function() {
+            alert('Грешка при бришење.');
+        });
+}
+</script>
+}

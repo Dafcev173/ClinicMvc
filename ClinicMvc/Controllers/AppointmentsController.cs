@@ -8,59 +8,66 @@ namespace ClinicMvc.Controllers;
 public class AppointmentsController : Controller
 {
     private readonly IAppointmentRepository _appointmentRepository;
-    private readonly IDoctorRepository _doctorRepository;
-    private readonly IPatientRepository _patientRepository;
+    private readonly IDoctorRepository      _doctorRepository;
+    private readonly IPatientRepository     _patientRepository;
 
-    // ВНИМАНИЕ: овие мора да се ИДЕНТИЧНИ со вредностите во
-    // CHECK constraint-от CHK_APPOINTMENTS_STATUS во базата.
-    // Твојата база моментално содржи латинична транслитерација
-    // ('Zakazan', 'Vo tek', 'Zavrsen', 'Otkazen') наместо кирилица.
-    // Ако подоцна го смениш CHECK constraint-от, ажурирај ја и оваа листа.
+    // Мора да се совпаѓаат со CHECK constraint во базата
     private static readonly string[] StatusOptions =
-    {
-        "Zakazan", "Vo tek", "Zavrsen", "Otkazen"
-    };
+        { "Zakazan", "Vo tek", "Zavrsen", "Otkazen" };
 
     public AppointmentsController(
         IAppointmentRepository appointmentRepository,
-        IDoctorRepository doctorRepository,
-        IPatientRepository patientRepository)
+        IDoctorRepository      doctorRepository,
+        IPatientRepository     patientRepository)
     {
         _appointmentRepository = appointmentRepository;
-        _doctorRepository = doctorRepository;
-        _patientRepository = patientRepository;
+        _doctorRepository      = doctorRepository;
+        _patientRepository     = patientRepository;
     }
 
-    // GET: /Appointments  (Главна страна)
+    // GET: /Appointments
     public async Task<IActionResult> Index(AppointmentFilter filter)
     {
         var appointments = await _appointmentRepository.SearchAsync(filter);
-        var doctors = await _doctorRepository.GetAllAsync();
-        var specialties = await _doctorRepository.GetSpecialtiesAsync();
+        var doctors      = await _doctorRepository.GetAllAsync();
+        var specialties  = await _doctorRepository.GetSpecialtiesAsync();
 
-        var viewModel = new AppointmentIndexViewModel
+        var vm = new AppointmentIndexViewModel
         {
-            Filter = filter,
+            Filter       = filter,
             Appointments = appointments,
-            Doctors = doctors
-                .Select(d => new SelectListItem($"{d.FirstName} {d.LastName}", d.Id.ToString()))
-                .ToList(),
-            Specialties = specialties
-                .Select(s => new SelectListItem(s, s))
-                .ToList(),
-            Statuses = StatusOptions
-                .Select(s => new SelectListItem(s, s))
-                .ToList()
+            Doctors      = doctors.Select(d =>
+                new SelectListItem(d.FullName, d.Id.ToString())).ToList(),
+            Specialties  = specialties.Select(s =>
+                new SelectListItem(s, s)).ToList(),
+            Statuses     = StatusOptions.Select(s =>
+                new SelectListItem(s, s)).ToList()
         };
 
-        return View(viewModel);
+        return View(vm);
     }
 
-    // GET: /Appointments/Create
-    public async Task<IActionResult> Create()
+    // GET: /Appointments/GetById/5  (за Edit Modal)
+    [HttpGet]
+    public async Task<IActionResult> GetById(int id)
     {
-        await PopulateDropdownsAsync();
-        return View(new Appointment { AppointmentDate = DateTime.Today });
+        var appointment = await _appointmentRepository.GetByIdAsync(id);
+        if (appointment == null) return NotFound();
+        return Json(appointment);
+    }
+
+    // GET: /Appointments/GetDropdowns  (за полнење на Modal dropdown-и)
+    [HttpGet]
+    public async Task<IActionResult> GetDropdowns()
+    {
+        var doctors  = await _doctorRepository.GetAllAsync();
+        var patients = await _patientRepository.GetAllAsync();
+        return Json(new
+        {
+            doctors  = doctors.Select(d  => new { d.Id, name = d.FullName }),
+            patients = patients.Select(p => new { p.Id, name = $"{p.FirstName} {p.LastName}" }),
+            statuses = StatusOptions
+        });
     }
 
     // POST: /Appointments/Create
@@ -68,84 +75,62 @@ public class AppointmentsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(Appointment appointment)
     {
+        // Не смее да биде во минатото
+        if (appointment.AppointmentDate.Date < DateTime.Today)
+            ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
+
+        // Конфликт — ист доктор, исто датум+време
+        if (await _appointmentRepository.HasConflictAsync(
+                appointment.DoctorId, appointment.AppointmentDate, appointment.AppointmentTime))
+            ModelState.AddModelError("AppointmentTime",
+                "Докторот веќе има термин во тоа датум и време.");
+
         if (!ModelState.IsValid)
         {
-            await PopulateDropdownsAsync();
-            return View(appointment);
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage);
+            return BadRequest(new { success = false, errors });
         }
 
         await _appointmentRepository.CreateAsync(appointment);
-        return RedirectToAction(nameof(Index));
+        return Ok(new { success = true });
     }
 
-    // GET: /Appointments/Edit/5
-    public async Task<IActionResult> Edit(int id)
-    {
-        var appointment = await _appointmentRepository.GetByIdAsync(id);
-        if (appointment == null)
-        {
-            return NotFound();
-        }
-
-        await PopulateDropdownsAsync();
-        return View(appointment);
-    }
-
-    // POST: /Appointments/Edit/5
+    // POST: /Appointments/Edit
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(int id, Appointment appointment)
+    public async Task<IActionResult> Edit(Appointment appointment)
     {
-        if (id != appointment.Id)
-        {
-            return BadRequest();
-        }
+        // Не смее да биде во минатото
+        if (appointment.AppointmentDate.Date < DateTime.Today)
+            ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
+
+        // Конфликт (исклучи го тековниот термин)
+        if (await _appointmentRepository.HasConflictAsync(
+                appointment.DoctorId, appointment.AppointmentDate,
+                appointment.AppointmentTime, appointment.Id))
+            ModelState.AddModelError("AppointmentTime",
+                "Докторот веќе има термин во тоа датум и време.");
 
         if (!ModelState.IsValid)
         {
-            await PopulateDropdownsAsync();
-            return View(appointment);
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage);
+            return BadRequest(new { success = false, errors });
         }
 
         await _appointmentRepository.UpdateAsync(appointment);
-        return RedirectToAction(nameof(Index));
+        return Ok(new { success = true });
     }
 
-    // GET: /Appointments/Delete/5
+    // POST: /Appointments/Delete
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id)
     {
-        var appointment = await _appointmentRepository.GetByIdAsync(id);
-        if (appointment == null)
-        {
-            return NotFound();
-        }
-        return View(appointment);
-    }
-
-    // POST: /Appointments/Delete/5
-    [HttpPost, ActionName("Delete")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteConfirmed(int id)
-    {
         await _appointmentRepository.DeleteAsync(id);
-        return RedirectToAction(nameof(Index));
-    }
-
-    private async Task PopulateDropdownsAsync()
-    {
-        var doctors = await _doctorRepository.GetAllAsync();
-        var patients = await _patientRepository.GetAllAsync();
-
-        ViewBag.Doctors = doctors
-            .Select(d => new SelectListItem($"{d.FirstName} {d.LastName}", d.Id.ToString()))
-            .ToList();
-
-        ViewBag.Patients = patients
-            .Select(p => new SelectListItem($"{p.FirstName} {p.LastName}", p.Id.ToString()))
-            .ToList();
-
-        ViewBag.Statuses = StatusOptions
-            .Select(s => new SelectListItem(s, s))
-            .ToList();
+        return Ok(new { success = true });
     }
 }

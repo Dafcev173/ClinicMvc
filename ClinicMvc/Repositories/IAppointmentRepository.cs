@@ -10,4 +10,5 @@ public interface IAppointmentRepository
     Task<int> CreateAsync(Appointment appointment);
     Task UpdateAsync(Appointment appointment);
     Task DeleteAsync(int id);
+    Task<bool> HasConflictAsync(int doctorId, DateTime date, TimeSpan time, int excludeId = 0);
 }
