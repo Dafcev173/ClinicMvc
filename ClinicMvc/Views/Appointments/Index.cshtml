@@ -8,78 +8,57 @@
     <button class="btn btn-primary" onclick="openCreateModal()">+ Нов термин</button>
 </div>
 
-{{-- Филтри --}}
-<form id="filterForm" class="card card-body mb-3">
+{{-- Филтри — автоматски се освежува при промена --}}
+<div class="card card-body mb-3">
     <div class="row g-3 align-items-end">
-        <div class="col-md-2">
+        <div class="col-md-3">
             <label class="form-label">Лекар</label>
-            <select name="DoctorId" class="form-select">
+            <select id="filterDoctor" class="form-select">
                 <option value="">-- Сите --</option>
                 @foreach (var d in Model.Doctors)
                 {
-                    if (Model.Filter.DoctorId?.ToString() == d.Value)
-                    {
-                        <option value="@d.Value" selected>@d.Text</option>
-                    }
-                    else
-                    {
-                        <option value="@d.Value">@d.Text</option>
-                    }
+                    <option value="@d.Value">@d.Text</option>
                 }
             </select>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
             <label class="form-label">Специјалност</label>
-            <select name="Specialty" class="form-select">
+            <select id="filterSpecialty" class="form-select">
                 <option value="">-- Сите --</option>
                 @foreach (var s in Model.Specialties)
                 {
-                    if (Model.Filter.Specialty == s.Value)
-                    {
-                        <option value="@s.Value" selected>@s.Text</option>
-                    }
-                    else
-                    {
-                        <option value="@s.Value">@s.Text</option>
-                    }
+                    <option value="@s.Value">@s.Text</option>
                 }
             </select>
         </div>
         <div class="col-md-2">
             <label class="form-label">Статус</label>
-            <select name="Status" class="form-select">
+            <select id="filterStatus" class="form-select">
                 <option value="">-- Сите --</option>
                 @foreach (var s in Model.Statuses)
                 {
-                    if (Model.Filter.Status == s.Value)
-                    {
-                        <option value="@s.Value" selected>@s.Text</option>
-                    }
-                    else
-                    {
-                        <option value="@s.Value">@s.Text</option>
-                    }
+                    <option value="@s.Value">@s.Text</option>
                 }
             </select>
         </div>
         <div class="col-md-2">
             <label class="form-label">Од</label>
-            <input type="date" name="DateFrom" class="form-control"
-                   value="@Model.Filter.DateFrom?.ToString("yyyy-MM-dd")" />
+            <input type="date" id="filterDateFrom" class="form-control" />
         </div>
         <div class="col-md-2">
             <label class="form-label">До</label>
-            <input type="date" name="DateTo" class="form-control"
-                   value="@Model.Filter.DateTo?.ToString("yyyy-MM-dd")" />
-        </div>
-        <div class="col-md-2">
-            <button type="submit" class="btn btn-secondary w-100">🔍 Пребарај</button>
+            <input type="date" id="filterDateTo" class="form-control" />
         </div>
     </div>
-</form>
+</div>
 
-@* Partial View за табелата *@
-@await Html.PartialAsync("_AppointmentsTable", Model.Appointments)
+{{-- Контејнер каде AJAX ја вчитува табелата --}}
+<div id="tableContainer">
+    <div class="text-center py-4">
+        <div class="spinner-border text-primary"></div>
+        <p class="mt-2">Се вчитува...</p>
+    </div>
+</div>
 
 @* ── Модал: Нов / Измени термин ── *@
 <div class="modal fade" id="appointmentModal" tabindex="-1">
@@ -108,7 +87,6 @@
                             </select>
                         </div>
                     </div>
-
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Датум <span class="text-danger">*</span></label>
@@ -121,17 +99,14 @@
                                    name="AppointmentTime" required />
                         </div>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">Статус</label>
                         <select class="form-select" id="status" name="Status"></select>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">Белешки</label>
                         <textarea class="form-control" id="notes" name="Notes" rows="2"></textarea>
                     </div>
-
                     <div id="appointmentFormErrors" class="alert alert-danger d-none"></div>
                 </form>
             </div>
@@ -170,14 +145,42 @@
 <script>
 const appointmentModal = new bootstrap.Modal(document.getElementById('appointmentModal'));
 const deleteModal      = new bootstrap.Modal(document.getElementById('deleteModal'));
-
 let dropdowns = { doctors: [], patients: [], statuses: [] };
 
-// Вчитај dropdown податоци еднаш при вчитување на страницата
-$.get('/Appointments/GetDropdowns', function(data) {
-    dropdowns = data;
+// ── Вчитување на табелата преку AJAX ──────────────────────────────
+function loadTable() {
+    const params = {
+        DoctorId:  $('#filterDoctor').val(),
+        Specialty: $('#filterSpecialty').val(),
+        Status:    $('#filterStatus').val(),
+        DateFrom:  $('#filterDateFrom').val(),
+        DateTo:    $('#filterDateTo').val()
+    };
+
+    $('#tableContainer').html(`
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">Се вчитува...</p>
+        </div>`);
+
+    $.get('/Appointments/LoadTable', params, function(html) {
+        $('#tableContainer').html(html);
+    });
+}
+
+// При промена на кој било филтер — автоматски освежи
+$('#filterDoctor, #filterSpecialty, #filterStatus, #filterDateFrom, #filterDateTo')
+    .on('change', function() { loadTable(); });
+
+// Вчитај при отворање на страницата
+$(document).ready(function() {
+    $.get('/Appointments/GetDropdowns', function(data) {
+        dropdowns = data;
+    });
+    loadTable();
 });
 
+// ── Dropdown полнење ──────────────────────────────────────────────
 function fillDropdowns(selectedDoctorId, selectedPatientId, selectedStatus) {
     const doctorSel  = document.getElementById('doctorId');
     const patientSel = document.getElementById('patientId');
@@ -188,21 +191,17 @@ function fillDropdowns(selectedDoctorId, selectedPatientId, selectedStatus) {
     statusSel.innerHTML  = '';
 
     dropdowns.doctors.forEach(d => {
-        const opt = new Option(d.name, d.id, false, d.id == selectedDoctorId);
-        doctorSel.appendChild(opt);
+        doctorSel.appendChild(new Option(d.name, d.id, false, d.id == selectedDoctorId));
     });
-
     dropdowns.patients.forEach(p => {
-        const opt = new Option(p.name, p.id, false, p.id == selectedPatientId);
-        patientSel.appendChild(opt);
+        patientSel.appendChild(new Option(p.name, p.id, false, p.id == selectedPatientId));
     });
-
     dropdowns.statuses.forEach(s => {
-        const opt = new Option(s, s, false, s === selectedStatus);
-        statusSel.appendChild(opt);
+        statusSel.appendChild(new Option(s, s, false, s === selectedStatus));
     });
 }
 
+// ── Create / Edit Modal ───────────────────────────────────────────
 function openCreateModal() {
     document.getElementById('appointmentModalTitle').textContent = 'Нов термин';
     document.getElementById('appointmentId').value   = '0';
@@ -232,7 +231,6 @@ function saveAppointment() {
     const url   = id === '0' ? '/Appointments/Create' : '/Appointments/Edit';
     const token = document.querySelector('#appointmentForm input[name="__RequestVerificationToken"]').value;
 
-    // Client-side: датумот не смее да биде во минатото
     const selectedDate = new Date(document.getElementById('appointmentDate').value);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     if (selectedDate < today) {
@@ -254,7 +252,7 @@ function saveAppointment() {
     $.post(url, data)
         .done(function() {
             appointmentModal.hide();
-            location.reload();
+            loadTable(); // Само табелата се освежува, не целата страна
         })
         .fail(function(xhr) {
             const response = xhr.responseJSON;
@@ -268,6 +266,7 @@ function showError(msg) {
     errDiv.classList.remove('d-none');
 }
 
+// ── Delete ────────────────────────────────────────────────────────
 function deleteAppointment(id) {
     document.getElementById('deleteAppointmentId').value = id;
     deleteModal.show();
@@ -280,7 +279,7 @@ function confirmDelete() {
     $.post('/Appointments/Delete', { id: id, __RequestVerificationToken: token })
         .done(function() {
             deleteModal.hide();
-            $(`#appointment-row-${id}`).fadeOut(300, function() { $(this).remove(); });
+            loadTable(); // Само табелата се освежува
         })
         .fail(function() {
             alert('Грешка при бришење.');

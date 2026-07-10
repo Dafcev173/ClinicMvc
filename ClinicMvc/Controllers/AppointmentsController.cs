@@ -11,7 +11,6 @@ public class AppointmentsController : Controller
     private readonly IDoctorRepository      _doctorRepository;
     private readonly IPatientRepository     _patientRepository;
 
-    // Мора да се совпаѓаат со CHECK constraint во базата
     private static readonly string[] StatusOptions =
         { "Zakazan", "Vo tek", "Zavrsen", "Otkazen" };
 
@@ -25,29 +24,37 @@ public class AppointmentsController : Controller
         _patientRepository     = patientRepository;
     }
 
-    // GET: /Appointments
-    public async Task<IActionResult> Index(AppointmentFilter filter)
+    // GET: /Appointments — ја вчитува страната со филтри (само еднаш)
+    public async Task<IActionResult> Index()
     {
-        var appointments = await _appointmentRepository.SearchAsync(filter);
-        var doctors      = await _doctorRepository.GetAllAsync();
-        var specialties  = await _doctorRepository.GetSpecialtiesAsync();
+        var doctors     = await _doctorRepository.GetAllAsync();
+        var specialties = await _doctorRepository.GetSpecialtiesAsync();
 
         var vm = new AppointmentIndexViewModel
         {
-            Filter       = filter,
-            Appointments = appointments,
-            Doctors      = doctors.Select(d =>
+            Filter      = new AppointmentFilter(),
+            Appointments = Enumerable.Empty<Appointment>(),
+            Doctors     = doctors.Select(d =>
                 new SelectListItem(d.FullName, d.Id.ToString())).ToList(),
-            Specialties  = specialties.Select(s =>
+            Specialties = specialties.Select(s =>
                 new SelectListItem(s, s)).ToList(),
-            Statuses     = StatusOptions.Select(s =>
+            Statuses    = StatusOptions.Select(s =>
                 new SelectListItem(s, s)).ToList()
         };
 
         return View(vm);
     }
 
-    // GET: /Appointments/GetById/5  (за Edit Modal)
+    // GET: /Appointments/LoadTable — AJAX endpoint, враќа само Partial View
+    // Се повикува при: вчитување, пребарување, по Create/Edit/Delete
+    [HttpGet]
+    public async Task<IActionResult> LoadTable(AppointmentFilter filter)
+    {
+        var appointments = await _appointmentRepository.SearchAsync(filter);
+        return PartialView("_AppointmentsTable", appointments);
+    }
+
+    // GET: /Appointments/GetById/5
     [HttpGet]
     public async Task<IActionResult> GetById(int id)
     {
@@ -56,15 +63,19 @@ public class AppointmentsController : Controller
         return Json(appointment);
     }
 
-    // GET: /Appointments/GetDropdowns  (за полнење на Modal dropdown-и)
+    // GET: /Appointments/GetDropdowns
     [HttpGet]
     public async Task<IActionResult> GetDropdowns()
     {
-        var doctors  = await _doctorRepository.GetAllAsync();
-        var patients = await _patientRepository.GetAllAsync();
+        var allDoctors = await _doctorRepository.GetAllAsync();
+        var patients   = await _patientRepository.GetAllAsync();
+
+        // Само активни доктори може да добијат нови термини
+        var activeDoctors = allDoctors.Where(d => d.IsActive);
+
         return Json(new
         {
-            doctors  = doctors.Select(d  => new { d.Id, name = d.FullName }),
+            doctors  = activeDoctors.Select(d  => new { d.Id, name = d.FullName }),
             patients = patients.Select(p => new { p.Id, name = $"{p.FirstName} {p.LastName}" }),
             statuses = StatusOptions
         });
@@ -75,21 +86,21 @@ public class AppointmentsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(Appointment appointment)
     {
-        // Не смее да биде во минатото
+        // Неактивен доктор
+        var doctor = await _doctorRepository.GetByIdAsync(appointment.DoctorId);
+        if (doctor == null || !doctor.IsActive)
+            ModelState.AddModelError("DoctorId", "Избраниот лекар не е активен.");
+
         if (appointment.AppointmentDate.Date < DateTime.Today)
             ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
 
-        // Конфликт — ист доктор, исто датум+време
         if (await _appointmentRepository.HasConflictAsync(
                 appointment.DoctorId, appointment.AppointmentDate, appointment.AppointmentTime))
-            ModelState.AddModelError("AppointmentTime",
-                "Докторот веќе има термин во тоа датум и време.");
+            ModelState.AddModelError("AppointmentTime", "Докторот веќе има термин во тоа датум и време.");
 
         if (!ModelState.IsValid)
         {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage);
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
             return BadRequest(new { success = false, errors });
         }
 
@@ -102,22 +113,22 @@ public class AppointmentsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(Appointment appointment)
     {
-        // Не смее да биде во минатото
+        // Неактивен доктор
+        var doctor = await _doctorRepository.GetByIdAsync(appointment.DoctorId);
+        if (doctor == null || !doctor.IsActive)
+            ModelState.AddModelError("DoctorId", "Избраниот лекар не е активен.");
+
         if (appointment.AppointmentDate.Date < DateTime.Today)
             ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
 
-        // Конфликт (исклучи го тековниот термин)
         if (await _appointmentRepository.HasConflictAsync(
                 appointment.DoctorId, appointment.AppointmentDate,
                 appointment.AppointmentTime, appointment.Id))
-            ModelState.AddModelError("AppointmentTime",
-                "Докторот веќе има термин во тоа датум и време.");
+            ModelState.AddModelError("AppointmentTime", "Докторот веќе има термин во тоа датум и време.");
 
         if (!ModelState.IsValid)
         {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage);
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
             return BadRequest(new { success = false, errors });
         }
 
