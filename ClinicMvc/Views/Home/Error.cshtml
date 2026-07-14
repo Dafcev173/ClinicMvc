@@ -1,0 +1,17 @@
+@* Пријателска страница за грешки - никогаш не прикажува технички детали *@
+@{
+    ViewData["Title"] = "Грешка";
+}
+
+<div class="text-center py-5">
+    <div class="display-1 mb-3">⚠️</div>
+    <h1 class="text-danger mb-3">Настана грешка</h1>
+    <p class="lead">An unexpected error occurred. Please try again later.</p>
+    <p class="text-muted">
+        Настана неочекувана грешка при обработка на вашето барање.
+        Обидете се повторно подоцна, или контактирајте го администраторот ако проблемот продолжи.
+    </p>
+    <a asp-controller="Home" asp-action="Index" class="btn btn-primary mt-3">
+        ← Назад на почетна страница
+    </a>
+</div>
