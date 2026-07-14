@@ -7,7 +7,8 @@ namespace ClinicMvc.Repositories;
 
 /// <summary>
 /// Репозиториум за управување со термини во базата на податоци.
-/// Содржи сите SQL операции поврзани со табелата APPOINTMENTS.
+/// Содржи сите SQL операции поврзани со табелата APPOINTMENTS,
+/// вклучувајќи пребарување со филтри, сортирање, пагинација и статистика.
 /// </summary>
 public class AppointmentRepository : IAppointmentRepository
 {
@@ -15,22 +16,11 @@ public class AppointmentRepository : IAppointmentRepository
     private readonly IDbConnectionFactory _connectionFactory;
 
     /// <summary>
-    /// Основен SELECT со JOIN-ови за прикажување на термините со имиња на лекар и пациент.
+    /// Основен FROM/JOIN дел кој се употребува во сите SELECT прашања.
     /// Забелешка: колоната PARIENTID е типографска грешка во базата (наместо PATIENTID),
-    /// затоа ја алиасираме до PATIENTID за да одговара на C# моделот.
+    /// затоа секогаш ја алиасираме до PATIENTID за да одговара на C# моделот.
     /// </summary>
-    private const string SelectSql = @"
-        SELECT
-            a.ID,
-            a.DOCTORID,
-            a.PARIENTID      AS PATIENTID,
-            a.APPOINTMENTDATE,
-            a.APPOINTMENTTIME,
-            a.STATUS,
-            a.NOTES,
-            (d.FIRSTNAME || ' ' || d.LASTNAME) AS DOCTORNAME,
-            (p.FIRSTNAME || ' ' || p.LASTNAME) AS PATIENTNAME,
-            d.SPECIALTY AS DOCTORSPECIALTY
+    private const string FromJoinSql = @"
         FROM APPOINTMENTS a
         JOIN DOCTORS  d ON d.ID = a.DOCTORID
         JOIN PATIENTS p ON p.ID = a.PARIENTID";
@@ -41,59 +31,158 @@ public class AppointmentRepository : IAppointmentRepository
     }
 
     /// <summary>
-    /// Ги враќа сите термини без филтри.
+    /// Ги враќа сите термини без филтри (интерна употреба, без пагинација).
     /// </summary>
     public async Task<IEnumerable<Appointment>> GetAllAsync()
     {
-        return await SearchAsync(new AppointmentFilter());
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"
+            SELECT
+                a.ID, a.DOCTORID, a.PARIENTID AS PATIENTID,
+                a.APPOINTMENTDATE, a.APPOINTMENTTIME, a.STATUS, a.NOTES,
+                (d.FIRSTNAME || ' ' || d.LASTNAME) AS DOCTORNAME,
+                (p.FIRSTNAME || ' ' || p.LASTNAME) AS PATIENTNAME,
+                d.SPECIALTY AS DOCTORSPECIALTY
+            " + FromJoinSql + @"
+            ORDER BY a.APPOINTMENTDATE, a.APPOINTMENTTIME";
+        return await connection.QueryAsync<Appointment>(sql);
     }
 
     /// <summary>
-    /// Пребарува термини според зadadените филтри.
-    /// Динамички гради WHERE клаузула само за полињата кои се пополнети.
+    /// Гради ги WHERE условите и параметрите заеднички за SearchAsync, CountAsync и GetStatisticsAsync,
+    /// за да не се повторува иста логика на три места.
+    /// </summary>
+    private static (string WhereClause, DynamicParameters Parameters) BuildWhereClause(AppointmentFilter filter)
+    {
+        var sb = new StringBuilder("WHERE 1=1");
+        var p  = new DynamicParameters();
+
+        // Пребарување по Ime на пациент (делумно совпаѓање, без разлика на големина на букви)
+        if (!string.IsNullOrWhiteSpace(filter.PatientFirstName))
+        {
+            sb.Append(" AND UPPER(p.FIRSTNAME) LIKE UPPER(@PatientFirstName)");
+            p.Add("PatientFirstName", $"%{filter.PatientFirstName.Trim()}%");
+        }
+
+        // Пребарување по Презиме на пациент
+        if (!string.IsNullOrWhiteSpace(filter.PatientLastName))
+        {
+            sb.Append(" AND UPPER(p.LASTNAME) LIKE UPPER(@PatientLastName)");
+            p.Add("PatientLastName", $"%{filter.PatientLastName.Trim()}%");
+        }
+
+        // Пребарување по ЕМБГ на пациент
+        if (!string.IsNullOrWhiteSpace(filter.PatientEmbg))
+        {
+            sb.Append(" AND p.EMBG LIKE @PatientEmbg");
+            p.Add("PatientEmbg", $"%{filter.PatientEmbg.Trim()}%");
+        }
+
+        // Пребарување по Ime на лекар (проверува во целото Ime + Презиме заедно)
+        if (!string.IsNullOrWhiteSpace(filter.DoctorName))
+        {
+            sb.Append(" AND UPPER(d.FIRSTNAME || ' ' || d.LASTNAME) LIKE UPPER(@DoctorName)");
+            p.Add("DoctorName", $"%{filter.DoctorName.Trim()}%");
+        }
+
+        // Филтер по специјалност (точно совпаѓање - доаѓа од dropdown)
+        if (!string.IsNullOrWhiteSpace(filter.Specialty))
+        {
+            sb.Append(" AND d.SPECIALTY = @Specialty");
+            p.Add("Specialty", filter.Specialty);
+        }
+
+        // Филтер по конкретен датум
+        if (filter.Date.HasValue)
+        {
+            sb.Append(" AND a.APPOINTMENTDATE = @Date");
+            p.Add("Date", filter.Date.Value.Date);
+        }
+
+        return (sb.ToString(), p);
+    }
+
+    /// <summary>
+    /// Ја мапира вредноста на SortBy до вистинска SQL колона.
+    /// Ова е белата листа (whitelist) која спречува SQL injection преку сортирањето,
+    /// бидејќи вредноста директно се вметнува во SQL текстот (не преку параметар).
+    /// </summary>
+    private static string GetOrderByColumn(string? sortBy) => sortBy?.ToLowerInvariant() switch
+    {
+        "time"    => "a.APPOINTMENTTIME",
+        "patient" => "p.LASTNAME, p.FIRSTNAME",
+        "doctor"  => "d.LASTNAME, d.FIRSTNAME",
+        "status"  => "a.STATUS",
+        _         => "a.APPOINTMENTDATE"   // "date" или непознато - користи датум по default
+    };
+
+    /// <summary>
+    /// Пребарува термини според филтрите, ги сортира и ги странира (10 по страница).
     /// </summary>
     public async Task<IEnumerable<Appointment>> SearchAsync(AppointmentFilter filter)
     {
         using var connection = _connectionFactory.CreateConnection();
+        var (where, p) = BuildWhereClause(filter);
 
-        // Почни со базичниот SQL и додавај услови според филтрите
-        var sql = new StringBuilder(SelectSql + " WHERE 1=1");
-        var p   = new DynamicParameters();
+        // Колона и насока за сортирање - direction се ограничува само на ASC/DESC (whitelist)
+        var orderColumn = GetOrderByColumn(filter.SortBy);
+        var direction    = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+            ? "DESC" : "ASC";
 
-        // Филтер по лекар
-        if (filter.DoctorId.HasValue)
-        {
-            sql.Append(" AND a.DOCTORID = @DoctorId");
-            p.Add("DoctorId", filter.DoctorId.Value);
-        }
-        // Филтер по специјалност
-        if (!string.IsNullOrWhiteSpace(filter.Specialty))
-        {
-            sql.Append(" AND d.SPECIALTY = @Specialty");
-            p.Add("Specialty", filter.Specialty);
-        }
-        // Филтер по статус
-        if (!string.IsNullOrWhiteSpace(filter.Status))
-        {
-            sql.Append(" AND a.STATUS = @Status");
-            p.Add("Status", filter.Status);
-        }
-        // Филтер по почетен датум
-        if (filter.DateFrom.HasValue)
-        {
-            sql.Append(" AND a.APPOINTMENTDATE >= @DateFrom");
-            p.Add("DateFrom", filter.DateFrom.Value.Date);
-        }
-        // Филтер по краен датум
-        if (filter.DateTo.HasValue)
-        {
-            sql.Append(" AND a.APPOINTMENTDATE <= @DateTo");
-            p.Add("DateTo", filter.DateTo.Value.Date);
-        }
+        // Пресметка на пагинација - SKIP прескокнува претходните страници
+        var page = filter.Page < 1 ? 1 : filter.Page;
+        var skip = (page - 1) * AppointmentFilter.PageSize;
+        p.Add("PageSize", AppointmentFilter.PageSize);
+        p.Add("Skip", skip);
 
-        // Подреди по датум и време
-        sql.Append(" ORDER BY a.APPOINTMENTDATE, a.APPOINTMENTTIME");
-        return await connection.QueryAsync<Appointment>(sql.ToString(), p);
+        // Firebird синтакса: FIRST/SKIP оди веднаш по SELECT, пред листата на колони
+        var sql = $@"
+            SELECT FIRST @PageSize SKIP @Skip
+                a.ID, a.DOCTORID, a.PARIENTID AS PATIENTID,
+                a.APPOINTMENTDATE, a.APPOINTMENTTIME, a.STATUS, a.NOTES,
+                (d.FIRSTNAME || ' ' || d.LASTNAME) AS DOCTORNAME,
+                (p.FIRSTNAME || ' ' || p.LASTNAME) AS PATIENTNAME,
+                d.SPECIALTY AS DOCTORSPECIALTY
+            {FromJoinSql}
+            {where}
+            ORDER BY {orderColumn} {direction}";
+
+        return await connection.QueryAsync<Appointment>(sql, p);
+    }
+
+    /// <summary>
+    /// Го брои вкупниот број термини кои одговараат на филтрите (без пагинација).
+    /// Се користи за пресметка на бројот на страници во пагинацијата.
+    /// </summary>
+    public async Task<int> CountAsync(AppointmentFilter filter)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var (where, p) = BuildWhereClause(filter);
+
+        var sql = $@"SELECT COUNT(*) {FromJoinSql} {where}";
+        return await connection.ExecuteScalarAsync<int>(sql, p);
+    }
+
+    /// <summary>
+    /// Пресметува статистика (вкупно, закажани, завршени, откажани) според тековните филтри.
+    /// COALESCE(...,0) е потребен затоа што SUM врз празен резултат враќа NULL во SQL.
+    /// </summary>
+    public async Task<AppointmentStatistics> GetStatisticsAsync(AppointmentFilter filter)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var (where, p) = BuildWhereClause(filter);
+
+        var sql = $@"
+            SELECT
+                COUNT(*) AS TOTAL,
+                COALESCE(SUM(CASE WHEN a.STATUS = 'Zakazan' THEN 1 ELSE 0 END), 0) AS SCHEDULED,
+                COALESCE(SUM(CASE WHEN a.STATUS = 'Zavrsen' THEN 1 ELSE 0 END), 0) AS COMPLETED,
+                COALESCE(SUM(CASE WHEN a.STATUS = 'Otkazen' THEN 1 ELSE 0 END), 0) AS CANCELLED
+            {FromJoinSql}
+            {where}";
+
+        var stats = await connection.QueryFirstOrDefaultAsync<AppointmentStatistics>(sql, p);
+        return stats ?? new AppointmentStatistics();
     }
 
     /// <summary>
@@ -153,7 +242,6 @@ public class AppointmentRepository : IAppointmentRepository
 
     /// <summary>
     /// Проверува дали докторот веќе има термин во истото датум и време.
-    /// Се користи за спречување на дупли термини.
     /// excludeId - ID на терминот кој се игнорира (при измена на постоечки термин)
     /// </summary>
     public async Task<bool> HasConflictAsync(int doctorId, DateTime date, TimeSpan time, int excludeId = 0)
@@ -171,15 +259,11 @@ public class AppointmentRepository : IAppointmentRepository
 
     /// <summary>
     /// Го менува статусот на термин (пр. Zakazan → Vo tek → Zavrsen).
-    /// Ако се проследат белешки, ги ажурира и нив (се користи при завршување на преглед).
-    /// Ако notes е null, полето NOTES во базата останува непроменето.
+    /// Ако се проследат белешки, ги ажурира и нив; COALESCE го задржува старото ако е null.
     /// </summary>
     public async Task UpdateStatusAsync(int id, string newStatus, string? notes = null)
     {
         using var connection = _connectionFactory.CreateConnection();
-
-        // Ако се проследени белешки - ажурирај и статус и белешки
-        // Ако не се проследени - ажурирај само статус (COALESCE го задржува старото NOTES)
         const string sql = @"UPDATE APPOINTMENTS
                               SET STATUS = @Status,
                                   NOTES  = COALESCE(@Notes, NOTES)
@@ -189,8 +273,7 @@ public class AppointmentRepository : IAppointmentRepository
 
     /// <summary>
     /// Ги враќа сите закажани времиња за конкретен доктор на конкретен датум.
-    /// Откажаните термини (Otkazen) НЕ се сметаат за зафатени - тој термин е слободен.
-    /// Се користи за пресметка на слободни термини.
+    /// Откажаните термини (Otkazen) НЕ се сметаат за зафатени.
     /// </summary>
     public async Task<IEnumerable<TimeSpan>> GetBookedTimesAsync(int doctorId, DateTime date)
     {

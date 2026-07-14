@@ -1,4 +1,4 @@
-@* Модел кој содржи филтри, листа на термини и dropdown опции *@
+@* Модел кој содржи филтри и dropdown опции за dashboard страницата *@
 @model AppointmentIndexViewModel
 @{
     ViewData["Title"] = "Термини";
@@ -10,55 +10,98 @@
     <button class="btn btn-primary" onclick="openCreateModal()">+ Нов термин</button>
 </div>
 
-@* Филтри - табелата се освежува автоматски при промена на кој било филтер *@
-<div class="card card-body mb-3">
-    <div class="row g-3 align-items-end">
-        <div class="col-md-3">
-            <label class="form-label">Лекар</label>
-            <select id="filterDoctor" class="form-select">
-                <option value="">-- Сите --</option>
-                @foreach (var d in Model.Doctors)
-                {
-                    <option value="@d.Value">@d.Text</option>
-                }
-            </select>
+@* ══════════════════ Dashboard приказ - два столба ══════════════════ *@
+<div class="row">
+
+    @* ─────────── Лева страна (col-md-3): Статистика + Филтри ─────────── *@
+    <div class="col-md-3">
+
+        @* Контејнер за статистика - се вчитува и освежува преку AJAX *@
+        <div id="statsContainer">
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+            </div>
         </div>
-        <div class="col-md-3">
-            <label class="form-label">Специјалност</label>
-            <select id="filterSpecialty" class="form-select">
-                <option value="">-- Сите --</option>
-                @foreach (var s in Model.Specialties)
-                {
-                    <option value="@s.Value">@s.Text</option>
-                }
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label">Статус</label>
-            <select id="filterStatus" class="form-select">
-                <option value="">-- Сите --</option>
-                @foreach (var s in Model.Statuses)
-                {
-                    <option value="@s.Value">@s.Text</option>
-                }
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label">Од</label>
-            <input type="date" id="filterDateFrom" class="form-control" />
-        </div>
-        <div class="col-md-2">
-            <label class="form-label">До</label>
-            <input type="date" id="filterDateTo" class="form-control" />
+
+        @* Картичка со филтри за пребарување *@
+        <div class="card card-body">
+            <h6 class="mb-3"> Филтри</h6>
+
+            <div class="mb-2">
+                <label class="form-label small">Ime на пациент</label>
+                <input type="text" id="filterPatientFirstName" class="form-control form-control-sm"
+                       placeholder="пр. Ана" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label small">Презиме на пациент</label>
+                <input type="text" id="filterPatientLastName" class="form-control form-control-sm"
+                       placeholder="пр. Стојанова" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label small">ЕМБГ на пациент</label>
+                <input type="text" id="filterPatientEmbg" class="form-control form-control-sm"
+                       placeholder="пр. 12034567" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label small">Ime на лекар</label>
+                <input type="text" id="filterDoctorName" class="form-control form-control-sm"
+                       placeholder="пр. Петров" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label small">Специјалност</label>
+                <select id="filterSpecialty" class="form-select form-select-sm">
+                    <option value="">-- Сите --</option>
+                    @foreach (var s in Model.Specialties)
+                    {
+                        <option value="@s.Value">@s.Text</option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small">Датум</label>
+                <input type="date" id="filterDate" class="form-control form-control-sm" />
+            </div>
+
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="clearFilters()">
+                Исчисти филтри
+            </button>
         </div>
     </div>
-</div>
 
-@* Контејнер каде AJAX динамички ја вчитува табелата со термини *@
-<div id="tableContainer">
-    <div class="text-center py-4">
-        <div class="spinner-border text-primary"></div>
-        <p class="mt-2">Се вчитува...</p>
+    @* ─────────── Десна страна (col-md-9): Сортирање + Табела + Пагинација ─────────── *@
+    <div class="col-md-9">
+
+        @* Контроли за сортирање, поставени над табелата *@
+        <div class="d-flex justify-content-end align-items-center mb-2 gap-2">
+            <label class="form-label small mb-0">Подреди по:</label>
+            <select id="sortBy" class="form-select form-select-sm w-auto">
+                <option value="Date">Датум</option>
+                <option value="Time">Време</option>
+                <option value="Patient">Пациент</option>
+                <option value="Doctor">Лекар</option>
+                <option value="Status">Статус</option>
+            </select>
+            <button type="button" id="sortDirectionBtn" class="btn btn-outline-secondary btn-sm"
+                    onclick="toggleSortDirection()" title="Смени насока на сортирање">
+                ↑ Растечки
+            </button>
+        </div>
+
+        @* Контејнер каде AJAX ја вчитува табелата со термини (постоечкиот Partial View) *@
+        <div id="tableContainer">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2">Се вчитува...</p>
+            </div>
+        </div>
+
+        @* Контејнер за пагинација - под табелата *@
+        <div id="paginationContainer"></div>
     </div>
 </div>
 
@@ -154,7 +197,7 @@
     </div>
 </div>
 
-@* Модал за завршување на преглед - внесување белешки (Task 9) *@
+@* Модал за завршување на преглед - внесување белешки *@
 <div class="modal fade" id="finishModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -191,78 +234,163 @@
     const deleteModal      = new bootstrap.Modal(document.getElementById('deleteModal'));
     const finishModal      = new bootstrap.Modal(document.getElementById('finishModal'));
 
-    // Глобална променлива за чување на dropdown податоци (лекари, пациенти, статуси)
+    // Глобална променлива за чување на dropdown податоци (лекари, пациенти, статуси) - за модалот
     let dropdowns = { doctors: [], patients: [], statuses: [] };
 
-    // Функција за вчитување на табелата преку AJAX
-    // Ги зема тековните вредности на филтрите и праќа GET барање до серверот
-    function loadTable() {
-        const params = {
-            DoctorId:  $('#filterDoctor').val(),
-            Specialty: $('#filterSpecialty').val(),
-            Status:    $('#filterStatus').val(),
-            DateFrom:  $('#filterDateFrom').val(),
-            DateTo:    $('#filterDateTo').val()
-        };
+    // Глобална состојба на dashboard-от: тековна страница и насока на сортирање.
+    // Филтрите и колоната за сортирање се читаат директно од полињата при секој повик.
+    let currentPage      = 1;
+    let sortDirection     = 'asc';
 
-        // Прикажи spinner додека се вчитува табелата
+    // ── Читање на тековните вредности на филтрите од полињата ──────────
+    function getFilterParams() {
+        return {
+            PatientFirstName: $('#filterPatientFirstName').val(),
+            PatientLastName:  $('#filterPatientLastName').val(),
+            PatientEmbg:      $('#filterPatientEmbg').val(),
+            DoctorName:       $('#filterDoctorName').val(),
+            Specialty:        $('#filterSpecialty').val(),
+            Date:             $('#filterDate').val(),
+            SortBy:           $('#sortBy').val(),
+            SortDirection:    sortDirection,
+            Page:             currentPage
+        };
+    }
+
+    // ── Вчитување на табелата преку AJAX (постоечкиот Partial View _AppointmentsTable) ──
+    function loadTable() {
+        const params = getFilterParams();
+
         $('#tableContainer').html(`
             <div class="text-center py-4">
                 <div class="spinner-border text-primary"></div>
                 <p class="mt-2">Се вчитува...</p>
             </div>`);
 
-        // AJAX повик до LoadTable акцијата - враќа само HTML на табелата
         $.get('/Appointments/LoadTable', params, function(html) {
             $('#tableContainer').html(html);
         });
     }
 
-    // При промена на кој било филтер, автоматски се освежува табелата
-    $('#filterDoctor, #filterSpecialty, #filterStatus, #filterDateFrom, #filterDateTo')
-        .on('change', function() { loadTable(); });
+    // ── Вчитување на пагинацијата преку AJAX ────────────────────────────
+    function loadPagination() {
+        const params = getFilterParams();
+        $.get('/Appointments/LoadPagination', params, function(html) {
+            $('#paginationContainer').html(html);
+        });
+    }
 
-    // При вчитување на страницата - земи dropdown податоци и вчитај ја табелата
+    // ── Вчитување на статистиката преку AJAX ────────────────────────────
+    function loadStatistics() {
+        const params = getFilterParams();
+        $.get('/Appointments/LoadStatistics', params, function(html) {
+            $('#statsContainer').html(html);
+        });
+    }
+
+    // ── Комбинирано освежување: табела + пагинација + статистика ───────
+    // Се повикува при промена на филтри или сортирање (сите три треба да се синхронизирани)
+    function refreshAll() {
+        loadTable();
+        loadPagination();
+        loadStatistics();
+    }
+
+    // ── Комбинирано освежување само на табела + пагинација ──────────────
+    // Се повикува при промена на страница - статистиката не зависи од страницата
+    function refreshTableOnly() {
+        loadTable();
+        loadPagination();
+    }
+
+    // ── Смена на страница преку копчињата Претходна/Следна ──────────────
+    function goToPage(page) {
+        if (page < 1) return;
+        currentPage = page;
+        refreshTableOnly();
+    }
+
+    // ── При промена на филтер - врати се на страница 1 и освежи сè ──────
+    function onFilterChanged() {
+        currentPage = 1;
+        refreshAll();
+    }
+
+    // Едноставен debounce за текстуалните полиња - чека 400ms по последното копче
+    // за да не се прати барање на секој внесен карактер
+    let debounceTimer;
+    function debouncedFilterChange() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(onFilterChanged, 400);
+    }
+
+    // Текстуални филтри - debounce на 'input' настан (додека се пишува)
+    $('#filterPatientFirstName, #filterPatientLastName, #filterPatientEmbg, #filterDoctorName')
+        .on('input', debouncedFilterChange);
+
+    // Dropdown и датум филтри - веднаш при промена ('change' настан)
+    $('#filterSpecialty, #filterDate').on('change', onFilterChanged);
+
+    // ── Исчисти ги сите филтри и освежи ──────────────────────────────────
+    function clearFilters() {
+        $('#filterPatientFirstName, #filterPatientLastName, #filterPatientEmbg, #filterDoctorName').val('');
+        $('#filterSpecialty').val('');
+        $('#filterDate').val('');
+        onFilterChanged();
+    }
+
+    // ── Сортирање ─────────────────────────────────────────────────────
+    // При промена на колоната за сортирање - врати се на страница 1
+    $('#sortBy').on('change', function() {
+        currentPage = 1;
+        refreshTableOnly();
+    });
+
+    // Копче за смена на насока (растечки/опаѓачки)
+    function toggleSortDirection() {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        const btn = document.getElementById('sortDirectionBtn');
+        btn.textContent = sortDirection === 'asc' ? '↑ Растечки' : '↓ Опаѓачки';
+        currentPage = 1;
+        refreshTableOnly();
+    }
+
+    // ── При вчитување на страницата ──────────────────────────────────────
     $(document).ready(function() {
-        // Вчитај ги лекарите, пациентите и статусите за употреба во модалите
+        // Вчитај ги лекарите, пациентите и статусите за употреба во Create/Edit модалот
         $.get('/Appointments/GetDropdowns', function(data) {
             dropdowns = data;
         });
-        // Прикажи ги термините при прво отворање на страницата
-        loadTable();
+        // Прикажи ги термините, статистиката и пагинацијата при прво отворање
+        refreshAll();
     });
 
-    // Функција за полнење на dropdown-ите во модалот
-    // selectedDoctorId, selectedPatientId, selectedStatus - тековно избрани вредности
+    // ── Полнење на dropdown-ите во Create/Edit модалот ──────────────────
     function fillDropdowns(selectedDoctorId, selectedPatientId, selectedStatus) {
         const doctorSel  = document.getElementById('doctorId');
         const patientSel = document.getElementById('patientId');
         const statusSel  = document.getElementById('status');
 
-        // Ресетирај ги dropdown-ите пред полнење
         doctorSel.innerHTML  = '<option value="">-- Избери лекар --</option>';
         patientSel.innerHTML = '<option value="">-- Избери пациент --</option>';
         statusSel.innerHTML  = '';
 
-        // Додај само активни лекари
         dropdowns.doctors.forEach(d => {
             doctorSel.appendChild(new Option(d.name, d.id, false, d.id == selectedDoctorId));
         });
-        // Додај ги сите пациенти
         dropdowns.patients.forEach(p => {
             patientSel.appendChild(new Option(p.name, p.id, false, p.id == selectedPatientId));
         });
-        // Додај ги можните статуси
         dropdowns.statuses.forEach(s => {
             statusSel.appendChild(new Option(s, s, false, s === selectedStatus));
         });
     }
 
-    // Отвори модал за креирање нов термин
+    // ── Отвори модал за креирање нов термин ──────────────────────────────
     function openCreateModal() {
         document.getElementById('appointmentModalTitle').textContent = 'Нов термин';
-        document.getElementById('appointmentId').value   = '0'; // 0 = нов запис
-        document.getElementById('appointmentDate').value = new Date().toISOString().split('T')[0]; // Денешен датум
+        document.getElementById('appointmentId').value   = '0';
+        document.getElementById('appointmentDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('appointmentTime').value = '';
         document.getElementById('notes').value           = '';
         clearAppointmentValidation();
@@ -270,8 +398,7 @@
         appointmentModal.show();
     }
 
-    // Отвори модал за измена на постоечки термин
-    // Прво вчитај ги податоците преку AJAX, па полни ги полињата
+    // ── Отвори модал за измена на постоечки термин ───────────────────────
     function openEditModal(id) {
         $.get(`/Appointments/GetById/${id}`, function(a) {
             document.getElementById('appointmentModalTitle').textContent = 'Измени термин';
@@ -285,73 +412,44 @@
         });
     }
 
-    // Клиентска валидација на формата за термин
-    // Враќа true ако сите задолжителни полиња се пополнети
+    // ── Клиентска валидација на формата за термин ────────────────────────
     function validateAppointmentForm() {
         let isValid = true;
 
-        // Провери дали е избран лекар
         const doctorId = document.getElementById('doctorId');
-        if (!doctorId.value) {
-            doctorId.classList.add('is-invalid');
-            isValid = false;
-        } else {
-            doctorId.classList.remove('is-invalid');
-            doctorId.classList.add('is-valid');
-        }
+        if (!doctorId.value) { doctorId.classList.add('is-invalid'); isValid = false; }
+        else { doctorId.classList.remove('is-invalid'); doctorId.classList.add('is-valid'); }
 
-        // Провери дали е избран пациент
         const patientId = document.getElementById('patientId');
-        if (!patientId.value) {
-            patientId.classList.add('is-invalid');
-            isValid = false;
-        } else {
-            patientId.classList.remove('is-invalid');
-            patientId.classList.add('is-valid');
-        }
+        if (!patientId.value) { patientId.classList.add('is-invalid'); isValid = false; }
+        else { patientId.classList.remove('is-invalid'); patientId.classList.add('is-valid'); }
 
-        // Провери дали е внесен датум
         const appointmentDate = document.getElementById('appointmentDate');
-        if (!appointmentDate.value) {
-            appointmentDate.classList.add('is-invalid');
-            isValid = false;
-        } else {
-            appointmentDate.classList.remove('is-invalid');
-            appointmentDate.classList.add('is-valid');
-        }
+        if (!appointmentDate.value) { appointmentDate.classList.add('is-invalid'); isValid = false; }
+        else { appointmentDate.classList.remove('is-invalid'); appointmentDate.classList.add('is-valid'); }
 
-        // Провери дали е внесено време
         const appointmentTime = document.getElementById('appointmentTime');
-        if (!appointmentTime.value) {
-            appointmentTime.classList.add('is-invalid');
-            isValid = false;
-        } else {
-            appointmentTime.classList.remove('is-invalid');
-            appointmentTime.classList.add('is-valid');
-        }
+        if (!appointmentTime.value) { appointmentTime.classList.add('is-invalid'); isValid = false; }
+        else { appointmentTime.classList.remove('is-invalid'); appointmentTime.classList.add('is-valid'); }
 
         return isValid;
     }
 
-    // Отстрани ги сите валидациски стилови при отворање на модалот
     function clearAppointmentValidation() {
         document.getElementById('appointmentFormErrors').classList.add('d-none');
         ['doctorId', 'patientId', 'appointmentDate', 'appointmentTime'].forEach(id => {
-            const el = document.getElementById(id);
-            el.classList.remove('is-invalid', 'is-valid');
+            document.getElementById(id).classList.remove('is-invalid', 'is-valid');
         });
     }
 
-    // Зачувај термин - Create или Edit зависно од ID
+    // ── Зачувај термин - Create или Edit зависно од ID ───────────────────
     function saveAppointment() {
-        // Прво изврши клиентска валидација
         if (!validateAppointmentForm()) return;
 
         const id    = document.getElementById('appointmentId').value;
         const url   = id === '0' ? '/Appointments/Create' : '/Appointments/Edit';
         const token = document.querySelector('#appointmentForm input[name="__RequestVerificationToken"]').value;
 
-        // Клиентска валидација - датумот не смее да биде во минатото
         const selectedDate = new Date(document.getElementById('appointmentDate').value);
         const today = new Date(); today.setHours(0, 0, 0, 0);
         if (selectedDate < today) {
@@ -359,7 +457,6 @@
             return;
         }
 
-        // Собери ги податоците од формата
         const data = {
             Id:              id,
             DoctorId:        document.getElementById('doctorId').value,
@@ -371,33 +468,29 @@
             __RequestVerificationToken: token
         };
 
-        // Испрати AJAX POST барање до серверот
         $.post(url, data)
             .done(function() {
                 appointmentModal.hide();
-                loadTable(); // Освежи само табелата, без reload на страницата
+                refreshAll(); // Ново/изменето значи и статистиката се менува
             })
             .fail(function(xhr) {
-                // Прикажи ги грешките од серверот
                 const response = xhr.responseJSON;
                 showError(response?.errors?.join('<br>') || 'Грешка при зачувување.');
             });
     }
 
-    // Прикажи порака за грешка во модалот
     function showError(msg) {
         const errDiv = document.getElementById('appointmentFormErrors');
         errDiv.innerHTML = msg;
         errDiv.classList.remove('d-none');
     }
 
-    // Отвори модал за потврда на бришење
+    // ── Бришење термин ────────────────────────────────────────────────
     function deleteAppointment(id) {
         document.getElementById('deleteAppointmentId').value = id;
         deleteModal.show();
     }
 
-    // Потврди бришење - испрати AJAX POST барање
     function confirmDelete() {
         const id    = document.getElementById('deleteAppointmentId').value;
         const token = document.querySelector('#deleteForm input[name="__RequestVerificationToken"]').value;
@@ -405,22 +498,20 @@
         $.post('/Appointments/Delete', { id: id, __RequestVerificationToken: token })
             .done(function() {
                 deleteModal.hide();
-                loadTable(); // Освежи само табелата
+                refreshAll(); // Бришење влијае на статистиката
             })
             .fail(function() {
                 alert('Грешка при бришење.');
             });
     }
 
-    // ── Task 8: Почеток на преглед ──────────────────────────────────────
-    // Го менува статусот директно од Zakazan во Vo tek, без потврда
+    // ── Почеток на преглед ────────────────────────────────────
     function startExam(id) {
-        // Земаме токен од кое било постоечко форма на страницата
         const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
 
         $.post('/Appointments/StartExam', { id: id, __RequestVerificationToken: token })
             .done(function() {
-                loadTable(); // Освежи ја табелата за да се прикаже новиот статус
+                refreshAll(); // Статусот се менува - статистиката треба да се освежи
             })
             .fail(function(xhr) {
                 const response = xhr.responseJSON;
@@ -428,15 +519,13 @@
             });
     }
 
-    // ── Task 9: Завршување на преглед ───────────────────────────────────
-    // Отвори модал за внесување белешки пред завршување
+    // ── Завршување на преглед ─────────────────────────────────
     function openFinishModal(id) {
         document.getElementById('finishAppointmentId').value = id;
         document.getElementById('finishNotes').value = '';
         finishModal.show();
     }
 
-    // Потврди завршување на преглед - испрати статус + белешки до серверот
     function confirmFinishExam() {
         const id    = document.getElementById('finishAppointmentId').value;
         const notes = document.getElementById('finishNotes').value;
@@ -445,7 +534,7 @@
         $.post('/Appointments/FinishExam', { id: id, notes: notes, __RequestVerificationToken: token })
             .done(function() {
                 finishModal.hide();
-                loadTable(); // Освежи ја табелата
+                refreshAll(); // Статусот се менува - статистиката треба да се освежи
             })
             .fail(function(xhr) {
                 const response = xhr.responseJSON;

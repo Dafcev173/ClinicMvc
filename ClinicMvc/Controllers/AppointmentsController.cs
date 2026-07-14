@@ -7,23 +7,19 @@ namespace ClinicMvc.Controllers;
 
 /// <summary>
 /// Контролер за управување со термини.
-/// Ги обработува сите CRUD операции и AJAX барања за страницата со термини.
+/// Ги обработува CRUD операциите, статус-преодите, и AJAX барањата за
+/// dashboard страницата (табела, статистика, сортирање, пагинација).
 /// </summary>
 public class AppointmentsController : Controller
 {
-    // Репозитории за пристап до базата на податоци
     private readonly IAppointmentRepository _appointmentRepository;
     private readonly IDoctorRepository      _doctorRepository;
     private readonly IPatientRepository     _patientRepository;
 
-    // Дозволени вредности за статусот на термин
-    // Мора да се совпаѓаат со CHECK constraint-от во базата
+    // Дозволени вредности за статусот на термин - мора да се совпаѓаат со CHECK constraint во базата
     private static readonly string[] StatusOptions =
         { "Zakazan", "Vo tek", "Zavrsen", "Otkazen" };
 
-    /// <summary>
-    /// Конструктор - зависностите се инјектираат автоматски преку DI контејнерот
-    /// </summary>
     public AppointmentsController(
         IAppointmentRepository appointmentRepository,
         IDoctorRepository      doctorRepository,
@@ -36,26 +32,17 @@ public class AppointmentsController : Controller
 
     /// <summary>
     /// GET: /Appointments
-    /// Ја вчитува главната страна со филтри и dropdown опции.
-    /// Табелата се вчитува посебно преку AJAX (LoadTable акција).
+    /// Ја вчитува dashboard страницата со филтри.
+    /// Табелата, статистиката и пагинацијата се вчитуваат посебно преку AJAX.
     /// </summary>
     public async Task<IActionResult> Index()
     {
-        // Вчитај ги лекарите и специјалностите за dropdown филтрите
-        var doctors     = await _doctorRepository.GetAllAsync();
         var specialties = await _doctorRepository.GetSpecialtiesAsync();
 
-        // Подготви го ViewModel-от со сите потребни податоци за View-от
         var vm = new AppointmentIndexViewModel
         {
-            Filter       = new AppointmentFilter(),
-            Appointments = Enumerable.Empty<Appointment>(),
-            Doctors      = doctors.Select(d =>
-                new SelectListItem(d.FullName, d.Id.ToString())).ToList(),
-            Specialties  = specialties.Select(s =>
-                new SelectListItem(s, s)).ToList(),
-            Statuses     = StatusOptions.Select(s =>
-                new SelectListItem(s, s)).ToList()
+            Filter      = new AppointmentFilter(),
+            Specialties = specialties.Select(s => new SelectListItem(s, s)).ToList()
         };
 
         return View(vm);
@@ -63,16 +50,49 @@ public class AppointmentsController : Controller
 
     /// <summary>
     /// GET: /Appointments/LoadTable
-    /// AJAX endpoint кој враќа само Partial View со табелата на термини.
-    /// Се повикува при: почетно вчитување, промена на филтри, по Create/Edit/Delete.
+    /// AJAX endpoint кој враќа само Partial View со табелата на термини
+    /// (веќе филтрирана, сортирана и странирана).
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> LoadTable(AppointmentFilter filter)
     {
-        // Пребарај ги термините според зададените филтри
         var appointments = await _appointmentRepository.SearchAsync(filter);
-        // Врати само HTML на табелата, не целата страна
         return PartialView("_AppointmentsTable", appointments);
+    }
+
+    /// <summary>
+    /// GET: /Appointments/LoadPagination
+    /// AJAX endpoint кој го брои вкупниот број записи според филтрите
+    /// и враќа Partial View со Previous/Next контролите.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> LoadPagination(AppointmentFilter filter)
+    {
+        var totalCount = await _appointmentRepository.CountAsync(filter);
+        var currentPage = filter.Page < 1 ? 1 : filter.Page;
+        var totalPages  = (int)Math.Ceiling(totalCount / (double)AppointmentFilter.PageSize);
+
+        var vm = new PaginationInfo
+        {
+            CurrentPage = currentPage,
+            TotalPages  = totalPages,
+            TotalCount  = totalCount,
+            PageSize    = AppointmentFilter.PageSize
+        };
+
+        return PartialView("_Pagination", vm);
+    }
+
+    /// <summary>
+    /// GET: /Appointments/LoadStatistics
+    /// AJAX endpoint кој ја пресметува статистиката според тековните филтри
+    /// (игнорирајќи сортирање и страница) и враќа Partial View со карти.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> LoadStatistics(AppointmentFilter filter)
+    {
+        var stats = await _appointmentRepository.GetStatisticsAsync(filter);
+        return PartialView("_Statistics", stats);
     }
 
     /// <summary>
@@ -90,7 +110,7 @@ public class AppointmentsController : Controller
 
     /// <summary>
     /// GET: /Appointments/GetDropdowns
-    /// Враќа JSON со листи за dropdown-ите во модалот.
+    /// Враќа JSON со листи за dropdown-ите во Create/Edit модалот.
     /// Само активни лекари може да добијат нови термини.
     /// </summary>
     [HttpGet]
@@ -98,8 +118,6 @@ public class AppointmentsController : Controller
     {
         var allDoctors = await _doctorRepository.GetAllAsync();
         var patients   = await _patientRepository.GetAllAsync();
-
-        // Филтрирај само активни лекари - неактивни не може да закажуваат термини
         var activeDoctors = allDoctors.Where(d => d.IsActive);
 
         return Json(new
@@ -113,34 +131,28 @@ public class AppointmentsController : Controller
     /// <summary>
     /// POST: /Appointments/Create
     /// Креира нов термин по успешна валидација.
-    /// Враќа JSON одговор за AJAX повикувачот.
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(Appointment appointment)
     {
-        // Провери дали избраниот лекар е активен
         var doctor = await _doctorRepository.GetByIdAsync(appointment.DoctorId);
         if (doctor == null || !doctor.IsActive)
             ModelState.AddModelError("DoctorId", "Избраниот лекар не е активен.");
 
-        // Не дозволи закажување за минат датум
         if (appointment.AppointmentDate.Date < DateTime.Today)
             ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
 
-        // Провери дали докторот веќе има термин во истото датум и време
         if (await _appointmentRepository.HasConflictAsync(
                 appointment.DoctorId, appointment.AppointmentDate, appointment.AppointmentTime))
             ModelState.AddModelError("AppointmentTime", "Докторот веќе има термин во тоа датум и време.");
 
-        // Ако има грешки, врати ги назад до клиентот
         if (!ModelState.IsValid)
         {
             var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
             return BadRequest(new { success = false, errors });
         }
 
-        // Зачувај го терминот во базата
         await _appointmentRepository.CreateAsync(appointment);
         return Ok(new { success = true });
     }
@@ -148,22 +160,18 @@ public class AppointmentsController : Controller
     /// <summary>
     /// POST: /Appointments/Edit
     /// Ажурира постоечки термин по успешна валидација.
-    /// Враќа JSON одговор за AJAX повикувачот.
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(Appointment appointment)
     {
-        // Провери дали избраниот лекар е активен
         var doctor = await _doctorRepository.GetByIdAsync(appointment.DoctorId);
         if (doctor == null || !doctor.IsActive)
             ModelState.AddModelError("DoctorId", "Избраниот лекар не е активен.");
 
-        // Не дозволи измена на датум во минатото
         if (appointment.AppointmentDate.Date < DateTime.Today)
             ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
 
-        // Провери конфликт, но исклучи го тековниот термин (по ID)
         if (await _appointmentRepository.HasConflictAsync(
                 appointment.DoctorId, appointment.AppointmentDate,
                 appointment.AppointmentTime, appointment.Id))
@@ -175,7 +183,6 @@ public class AppointmentsController : Controller
             return BadRequest(new { success = false, errors });
         }
 
-        // Ажурирај го терминот во базата
         await _appointmentRepository.UpdateAsync(appointment);
         return Ok(new { success = true });
     }
@@ -183,7 +190,6 @@ public class AppointmentsController : Controller
     /// <summary>
     /// POST: /Appointments/Delete
     /// Брише термин според ID.
-    /// Враќа JSON одговор за AJAX повикувачот.
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -195,9 +201,7 @@ public class AppointmentsController : Controller
 
     /// <summary>
     /// POST: /Appointments/StartExam
-    /// Task 8 - Почеток на преглед.
-    /// Го менува статусот на терминот од "Zakazan" во "Vo tek".
-    /// Дозволено е само ако терминот моментално е во статус "Zakazan".
+    /// Task 8 - Почеток на преглед: Zakazan → Vo tek.
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -207,7 +211,6 @@ public class AppointmentsController : Controller
         if (appointment == null)
             return NotFound(new { success = false, errors = new[] { "Терминот не постои." } });
 
-        // Дозволи промена само од Zakazan во Vo tek
         if (appointment.Status != "Zakazan")
             return BadRequest(new { success = false, errors = new[] { "Прегледот може да започне само за закажани термини." } });
 
@@ -217,9 +220,7 @@ public class AppointmentsController : Controller
 
     /// <summary>
     /// POST: /Appointments/FinishExam
-    /// Task 9 - Завршување на преглед.
-    /// Го менува статусот на терминот од "Vo tek" во "Zavrsen" и ги зачувува белешките.
-    /// Дозволено е само ако терминот моментално е во статус "Vo tek".
+    /// Task 9 - Завршување на преглед: Vo tek → Zavrsen, со белешки.
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -229,7 +230,6 @@ public class AppointmentsController : Controller
         if (appointment == null)
             return NotFound(new { success = false, errors = new[] { "Терминот не постои." } });
 
-        // Дозволи промена само од Vo tek во Zavrsen
         if (appointment.Status != "Vo tek")
             return BadRequest(new { success = false, errors = new[] { "Прегледот може да заврши само ако е во тек." } });
 
