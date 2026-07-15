@@ -6,11 +6,10 @@ namespace ClinicMvc.Repositories;
 
 /// <summary>
 /// Репозиториум за управување со доктори во базата на податоци.
-/// Содржи сите SQL операции поврзани со табелата DOCTORS.
+/// Поддржува Soft Delete (записите никогаш не се физички бришат) и audit колони.
 /// </summary>
 public class DoctorRepository : IDoctorRepository
 {
-    // Фабрика за креирање на конекција со Firebird базата
     private readonly IDbConnectionFactory _connectionFactory;
 
     public DoctorRepository(IDbConnectionFactory connectionFactory)
@@ -19,80 +18,112 @@ public class DoctorRepository : IDoctorRepository
     }
 
     /// <summary>
-    /// Ги враќа сите доктори подредени по презиме.
+    /// Ги враќа сите АКТИВНИ (не-избришани) доктори, подредени по презиме.
+    /// ISDELETED = FALSE секогаш се проверува - ова е Soft Delete образецот.
     /// </summary>
     public async Task<IEnumerable<Doctor>> GetAllAsync()
     {
         using var connection = _connectionFactory.CreateConnection();
-        const string sql = @"SELECT ID, FIRSTNAME, LASTNAME, SPECIALTY, PHONE, ISACTIVE
+        const string sql = @"SELECT ID, FIRSTNAME, LASTNAME, SPECIALTY, PHONE, ISACTIVE,
+                                     ISDELETED, CREATEDON, CREATEDBY, MODIFIEDON, MODIFIEDBY
                               FROM DOCTORS
+                              WHERE ISDELETED = FALSE
                               ORDER BY LASTNAME";
         return await connection.QueryAsync<Doctor>(sql);
     }
 
-    /// <summary>
-    /// Го враќа еден доктор според ID.
-    /// Враќа null ако докторот не постои.
-    /// </summary>
     public async Task<Doctor?> GetByIdAsync(int id)
     {
         using var connection = _connectionFactory.CreateConnection();
-        const string sql = @"SELECT ID, FIRSTNAME, LASTNAME, SPECIALTY, PHONE, ISACTIVE
+        const string sql = @"SELECT ID, FIRSTNAME, LASTNAME, SPECIALTY, PHONE, ISACTIVE,
+                                     ISDELETED, CREATEDON, CREATEDBY, MODIFIEDON, MODIFIEDBY
                               FROM DOCTORS WHERE ID = @Id";
         return await connection.QueryFirstOrDefaultAsync<Doctor>(sql, new { Id = id });
     }
 
     /// <summary>
-    /// Креира нов доктор во базата.
-    /// Го враќа ID-то на новиот запис (RETURNING ID).
+    /// Креира нов доктор. createdBy доаѓа од најавениот корисник (се повикува од контролерот).
     /// </summary>
-    public async Task<int> CreateAsync(Doctor doctor)
+    public async Task<int> CreateAsync(Doctor doctor, string createdBy)
     {
         using var connection = _connectionFactory.CreateConnection();
-        const string sql = @"INSERT INTO DOCTORS (FIRSTNAME, LASTNAME, SPECIALTY, PHONE, ISACTIVE)
-                              VALUES (@FirstName, @LastName, @Specialty, @Phone, @IsActive)
+        const string sql = @"INSERT INTO DOCTORS
+                                (FIRSTNAME, LASTNAME, SPECIALTY, PHONE, ISACTIVE, ISDELETED, CREATEDON, CREATEDBY)
+                              VALUES
+                                (@FirstName, @LastName, @Specialty, @Phone, @IsActive, FALSE, CURRENT_TIMESTAMP, @CreatedBy)
                               RETURNING ID";
-        return await connection.ExecuteScalarAsync<int>(sql, doctor);
+        return await connection.ExecuteScalarAsync<int>(sql, new
+        {
+            doctor.FirstName, doctor.LastName, doctor.Specialty, doctor.Phone, doctor.IsActive, CreatedBy = createdBy
+        });
     }
 
     /// <summary>
-    /// Ажурира постоечки доктор во базата.
+    /// Ажурира доктор. modifiedBy доаѓа од најавениот корисник.
     /// </summary>
-    public async Task UpdateAsync(Doctor doctor)
+    public async Task UpdateAsync(Doctor doctor, string modifiedBy)
     {
         using var connection = _connectionFactory.CreateConnection();
         const string sql = @"UPDATE DOCTORS
-                              SET FIRSTNAME = @FirstName,
-                                  LASTNAME  = @LastName,
-                                  SPECIALTY = @Specialty,
-                                  PHONE     = @Phone,
-                                  ISACTIVE  = @IsActive
+                              SET FIRSTNAME  = @FirstName,
+                                  LASTNAME   = @LastName,
+                                  SPECIALTY  = @Specialty,
+                                  PHONE      = @Phone,
+                                  ISACTIVE   = @IsActive,
+                                  MODIFIEDON = CURRENT_TIMESTAMP,
+                                  MODIFIEDBY = @ModifiedBy
                               WHERE ID = @Id";
-        await connection.ExecuteAsync(sql, doctor);
+        await connection.ExecuteAsync(sql, new
+        {
+            doctor.Id, doctor.FirstName, doctor.LastName, doctor.Specialty,
+            doctor.Phone, doctor.IsActive, ModifiedBy = modifiedBy
+        });
     }
 
     /// <summary>
-    /// Брише доктор од базата според ID.
-    /// Ќе фрли грешка ако докторот има поврзани термини (FK constraint).
+    /// SOFT DELETE - НЕ го брише редот физички, само поставува ISDELETED = TRUE.
+    /// Записот останува во базата (важно за историски термини кои упатуваат кон него).
     /// </summary>
-    public async Task DeleteAsync(int id)
+    public async Task DeleteAsync(int id, string modifiedBy)
     {
         using var connection = _connectionFactory.CreateConnection();
-        const string sql = "DELETE FROM DOCTORS WHERE ID = @Id";
-        await connection.ExecuteAsync(sql, new { Id = id });
+        const string sql = @"UPDATE DOCTORS
+                              SET ISDELETED  = TRUE,
+                                  MODIFIEDON = CURRENT_TIMESTAMP,
+                                  MODIFIEDBY = @ModifiedBy
+                              WHERE ID = @Id";
+        await connection.ExecuteAsync(sql, new { Id = id, ModifiedBy = modifiedBy });
     }
 
     /// <summary>
-    /// Ги враќа сите уникатни специјалности од табелата DOCTORS.
-    /// Се користи за полнење на филтерот по специјалност.
+    /// Ги враќа сите уникатни специјалности од АКТИВНИТЕ доктори.
     /// </summary>
     public async Task<IEnumerable<string>> GetSpecialtiesAsync()
     {
         using var connection = _connectionFactory.CreateConnection();
         const string sql = @"SELECT DISTINCT SPECIALTY
                               FROM DOCTORS
-                              WHERE SPECIALTY IS NOT NULL
+                              WHERE SPECIALTY IS NOT NULL AND ISDELETED = FALSE
                               ORDER BY SPECIALTY";
         return await connection.QueryAsync<string>(sql);
+    }
+
+    /// <summary>
+    /// Ги враќа денешните термини за конкретен доктор (за Doctor Details / Dashboard страниците).
+    /// </summary>
+    public async Task<IEnumerable<Appointment>> GetTodayScheduleAsync(int doctorId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"SELECT
+                                a.ID, a.DOCTORID, a.PARIENTID AS PATIENTID,
+                                a.APPOINTMENTDATE, a.APPOINTMENTTIME, a.STATUS, a.NOTES,
+                                (p.FIRSTNAME || ' ' || p.LASTNAME) AS PATIENTNAME
+                              FROM APPOINTMENTS a
+                              JOIN PATIENTS p ON p.ID = a.PARIENTID
+                              WHERE a.DOCTORID = @DoctorId
+                                AND a.APPOINTMENTDATE = CURRENT_DATE
+                                AND a.ISDELETED = FALSE
+                              ORDER BY a.APPOINTMENTTIME";
+        return await connection.QueryAsync<Appointment>(sql, new { DoctorId = doctorId });
     }
 }

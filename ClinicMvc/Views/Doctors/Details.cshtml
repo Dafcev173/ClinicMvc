@@ -1,0 +1,50 @@
+@* Детали за доктор + денешен распоред (Дел 4) *@
+@model Doctor
+@{
+    ViewData["Title"] = "Детали за доктор";
+    var schedule = (IEnumerable<Appointment>)ViewBag.TodaySchedule;
+}
+
+<h2>Д-р @Model.FirstName @Model.LastName</h2>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-dark text-white">Информации</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>Специјалност:</strong> @Model.Specialty</li>
+                <li class="list-group-item"><strong>Телефон:</strong> @Model.Phone</li>
+                <li class="list-group-item">
+                    <strong>Статус:</strong>
+                    @(Model.IsActive ? "Активен" : "Неактивен")
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-dark text-white">📅 Денешни термини</div>
+            <div class="card-body">
+                @if (!schedule.Any())
+                {
+                    <p class="text-muted">Нема закажани термини за денес.</p>
+                }
+                else
+                {
+                    <ul class="list-group">
+                        @foreach (var a in schedule)
+                        {
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span>@a.AppointmentTime.ToString(@"hh\:mm") — @a.PatientName</span>
+                                <span class="badge bg-info text-dark">@a.Status</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<a asp-action="Index" class="btn btn-secondary mt-3">← Назад</a>

@@ -2,12 +2,17 @@ using ClinicMvc.Models;
 
 namespace ClinicMvc.Repositories;
 
+/// <summary>
+/// Интерфејс за репозиториумот на доктори.
+/// Create/Update/Delete методите бараат "по кого" параметар за audit колоните.
+/// </summary>
 public interface IDoctorRepository
 {
     Task<IEnumerable<Doctor>> GetAllAsync();
     Task<Doctor?> GetByIdAsync(int id);
-    Task<int> CreateAsync(Doctor doctor);
-    Task UpdateAsync(Doctor doctor);
-    Task DeleteAsync(int id);
+    Task<int> CreateAsync(Doctor doctor, string createdBy);
+    Task UpdateAsync(Doctor doctor, string modifiedBy);
+    Task DeleteAsync(int id, string modifiedBy);
     Task<IEnumerable<string>> GetSpecialtiesAsync();
+    Task<IEnumerable<Appointment>> GetTodayScheduleAsync(int doctorId);
 }

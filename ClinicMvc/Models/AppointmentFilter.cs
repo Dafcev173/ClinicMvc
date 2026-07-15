@@ -27,6 +27,13 @@ public class AppointmentFilter
     /// <summary>Конкретен датум на термин</summary>
     public DateTime? Date { get; set; }
 
+    /// <summary>
+    /// НЕ доаѓа од корисничкиот интерфејс - контролерот го поставува ова автоматски
+    /// кога најавениот корисник е Doctor, за да гледа само свои термини.
+    /// Администраторите го оставаат ова null (гледаат сè).
+    /// </summary>
+    public int? RestrictToDoctorId { get; set; }
+
     // ── Сортирање ──
     /// <summary>Колона по која се сортира: Date, Time, Patient, Doctor, Status</summary>
     public string SortBy { get; set; } = "Date";

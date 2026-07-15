@@ -1,18 +1,16 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClinicMvc.Controllers;
 
-
-
 /// <summary>
 /// Контролер за почетната страница и страницата за грешки.
+/// [AllowAnonymous] е потребен бидејќи глобалната политика (Program.cs) бара
+/// најава за сите контролери по default - овие две акции мора да бидат исклучок.
 /// </summary>
 public class HomeController : Controller
 {
-    /// <summary>
-    /// GET: /
-    /// Ја прикажува почетната страница со линкови кон Доктори/Пациенти/Термини.
-    /// </summary>
+    /// <summary>GET: / - ако не е најавен, автоматски ќе биде пренасочен кон Login.</summary>
     public IActionResult Index()
     {
         return View();
@@ -20,11 +18,9 @@ public class HomeController : Controller
 
     /// <summary>
     /// GET: /Home/Error
-    /// Пријателска страница за грешки - кон неа пренасочува GlobalExceptionMiddleware
-    /// секогаш кога ќе се фати необработен исклучок во апликацијата (за не-AJAX барања).
-    /// [ResponseCache] со NoStore спречува прелистувачот да ја кешира оваа страница -
-    /// секоја грешка треба да се прикаже свежо, не од кеш.
+    /// Мора да е достапна и за не-најавени корисници (грешка може да се случи и пред најава).
     /// </summary>
+    [AllowAnonymous]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {

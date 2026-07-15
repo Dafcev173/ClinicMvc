@@ -1,0 +1,42 @@
+@* Форма за најава - достапна за сите (AllowAnonymous) *@
+@model LoginViewModel
+@{
+    ViewData["Title"] = "Најава";
+    Layout = "_LoginLayout";
+}
+
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card shadow" style="width: 380px;">
+        <div class="card-body p-4">
+            <h3 class="text-center mb-4">🏥 Клиника</h3>
+
+            <form asp-action="Login" asp-route-returnUrl="@ViewBag.ReturnUrl" method="post">
+                @* Безбедносен токен *@
+                @Html.AntiForgeryToken()
+
+                @* Порака за грешка при неуспешна најава *@
+                <div asp-validation-summary="All" class="alert alert-danger d-none"
+                     data-has-errors="@(!ViewData.ModelState.IsValid)"></div>
+
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="alert alert-danger">
+                        @Html.ValidationSummary(false, "", new { @class = "mb-0" })
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label asp-for="Username" class="form-label"></label>
+                    <input asp-for="Username" class="form-control" autofocus />
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Password" class="form-label"></label>
+                    <input asp-for="Password" class="form-control" />
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Најави се</button>
+            </form>
+        </div>
+    </div>
+</div>

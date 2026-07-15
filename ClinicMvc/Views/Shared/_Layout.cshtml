@@ -10,12 +10,43 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3">
         <a class="navbar-brand" asp-controller="Home" asp-action="Index">🏥 Клиника</a>
-        <div class="navbar-nav ms-3">
-            <a class="nav-link" asp-controller="Doctors" asp-action="Index">Доктори</a>
-            <a class="nav-link" asp-controller="Patients" asp-action="Index">Пациенти</a>
-            <a class="nav-link" asp-controller="Appointments" asp-action="Index">Термини</a>
-            <a class="nav-link" asp-controller="FreeSlots" asp-action="Index">Слободни термини</a>
+        <div class="navbar-nav ms-3 flex-grow-1">
+            @* Линковите се прикажуваат само ако е најавен соодветна улога *@
+            @if (User.IsInRole("Administrator"))
+            {
+                <a class="nav-link" asp-controller="Doctors" asp-action="Index">Доктори</a>
+                <a class="nav-link" asp-controller="Patients" asp-action="Index">Пациенти</a>
+                <a class="nav-link" asp-controller="Appointments" asp-action="Index">Термини</a>
+                <a class="nav-link" asp-controller="AuditLogs" asp-action="Index">Логови</a>
+            }
+            @if (User.IsInRole("Doctor"))
+            {
+                <a class="nav-link" asp-controller="DoctorDashboard" asp-action="Index">Мој dashboard</a>
+                <a class="nav-link" asp-controller="Appointments" asp-action="Index">Мои термини</a>
+                <a class="nav-link" asp-controller="Patients" asp-action="Index">Пациенти</a>
+            }
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a class="nav-link" asp-controller="FreeSlots" asp-action="Index">Слободни термини</a>
+            }
         </div>
+
+        @* Прикажи "Најави се" или "Одјава" зависно од состојбата *@
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <span class="text-white me-3">
+                👤 @User.Identity!.Name
+                <span class="badge bg-secondary">@User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</span>
+            </span>
+            <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-light btn-sm">Одjava</button>
+            </form>
+        }
+        else
+        {
+            <a class="btn btn-outline-light btn-sm" asp-controller="Account" asp-action="Login">Најави се</a>
+        }
     </nav>
 
     <main class="container mt-4">

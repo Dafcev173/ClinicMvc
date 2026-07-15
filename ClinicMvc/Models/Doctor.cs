@@ -33,9 +33,24 @@ public class Doctor
     [Display(Name = "Активен")]
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Soft delete - true значи докторот е "избришан" но записот сепак постои во базата</summary>
+    public bool IsDeleted { get; set; } = false;
+
+    // Audit полиња - кој и кога креирал/изменил
+    public DateTime CreatedOn { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTime? ModifiedOn { get; set; }
+    public string? ModifiedBy { get; set; }
+
     /// <summary>
     /// Пресметано поле - целосно ime на докторот.
     /// Не се зачувува во базата, само за приказ.
     /// </summary>
     public string FullName => $"{FirstName} {LastName}";
+
+    /// <summary>
+    /// Навигационо поле - поврзаната корисничка сметка (ако постои).
+    /// Не се вчитува автоматски преку Dapper - се полни рачно по потреба.
+    /// </summary>
+    public User? User { get; set; }
 }

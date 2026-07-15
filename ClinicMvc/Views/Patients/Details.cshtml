@@ -1,0 +1,63 @@
+@* Детали за пациент + медицинска историја (Дел 6) *@
+@model Patient
+@{
+    ViewData["Title"] = "Детали за пациент";
+    var history = (IEnumerable<Appointment>)ViewBag.MedicalHistory;
+}
+
+<h2>@Model.FirstName @Model.LastName</h2>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-dark text-white">Информации за пациент</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>Ime:</strong> @Model.FirstName</li>
+                <li class="list-group-item"><strong>Презиме:</strong> @Model.LastName</li>
+                <li class="list-group-item"><strong>ЕМБГ:</strong> @Model.Embg</li>
+                <li class="list-group-item"><strong>Телефон:</strong> @Model.Phone</li>
+                <li class="list-group-item"><strong>Е-пошта:</strong> @Model.Email</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-dark text-white">🩺 Медицинска историја</div>
+            <div class="card-body p-0">
+                @if (!history.Any())
+                {
+                    <p class="text-muted p-3">Нема претходни прегледи.</p>
+                }
+                else
+                {
+                    <table class="table table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Датум</th>
+                                <th>Лекар</th>
+                                <th>Специјалност</th>
+                                <th>Статус</th>
+                                <th>Белешки</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in history)
+                            {
+                                <tr>
+                                    <td>@a.AppointmentDate.ToString("dd.MM.yyyy")</td>
+                                    <td>@a.DoctorName</td>
+                                    <td>@a.DoctorSpecialty</td>
+                                    <td><span class="badge bg-secondary">@a.Status</span></td>
+                                    <td>@(string.IsNullOrEmpty(a.Notes) ? "—" : a.Notes)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<a asp-action="Index" class="btn btn-secondary mt-3">← Назад</a>

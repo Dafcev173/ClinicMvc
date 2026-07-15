@@ -1,15 +1,16 @@
 using ClinicMvc.Models;
 using ClinicMvc.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace ClinicMvc.Controllers;
 
 /// <summary>
-/// Контролер за приказ на слободни термини (Task 10).
-/// Пресметува кои термини од работното време се уште не се закажани
-/// за избраниот доктор на избраниот датум.
+/// Контролер за приказ на слободни термини.
+/// Достапен и за Administrator и за Doctor.
 /// </summary>
+[Authorize(Roles = "Administrator,Doctor")]
 public class FreeSlotsController : Controller
 {
     private readonly IDoctorRepository      _doctorRepository;
