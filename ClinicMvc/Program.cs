@@ -33,6 +33,11 @@ builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
+// Services слој - ја содржи бизнис логиката, контролерите само ги повикуваат
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<IDoctorService, DoctorService>();
+builder.Services.AddScoped<IExportService, ExportService>();
+
 // Логер за грешки
 builder.Services.AddSingleton<IErrorLogger, FileErrorLogger>();
 

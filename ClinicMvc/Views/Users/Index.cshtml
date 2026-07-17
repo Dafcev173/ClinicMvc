@@ -1,0 +1,152 @@
+@* Листа на кориснички сметки - Administrator може да ресетира лозинка или да брише сметка *@
+@model IEnumerable<User>
+@{
+    ViewData["Title"] = "Кориснички сметки";
+}
+
+<h2 class="mb-3">Кориснички сметки</h2>
+
+<table class="table table-bordered table-hover">
+    <thead class="table-dark">
+        <tr>
+            <th>Корисничко ime</th>
+            <th>Улога</th>
+            <th>Поврзан доктор</th>
+            <th>Креиран на</th>
+            <th>Акции</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var u in Model)
+        {
+            <tr id="user-row-@u.Id">
+                <td>@u.Username</td>
+                <td><span class="badge bg-secondary">@u.Role</span></td>
+                <td>@(u.Doctor != null ? u.Doctor.FullName : "-")</td>
+                <td>@u.CreatedOn.ToString("dd.MM.yyyy")</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="openResetModal(@u.Id, '@u.Username')">Ресетирај лозинка</button>
+                    @if (u.Username != User.Identity!.Name)
+                    {
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser(@u.Id, '@u.Username')">Избриши</button>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@* Модал за ресетирање лозинка *@
+<div class="modal fade" id="resetModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">Ресетирај лозинка</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Нова лозинка за <strong id="resetTargetName"></strong>:</p>
+                <form id="resetForm" novalidate>
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="resetUserId" name="UserId" value="0" />
+                    <div class="mb-3">
+                        <label class="form-label">Нова лозинка</label>
+                        <input type="password" class="form-control" id="newPassword" name="NewPassword" />
+                        <div class="invalid-feedback">Лозинката мора да има најмалку 6 карактери.</div>
+                    </div>
+                    <div id="resetFormErrors" class="alert alert-danger d-none"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Откажи</button>
+                <button type="button" class="btn btn-primary" onclick="confirmReset()">Зачувај</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Модал за потврда на бришење *@
+<div class="modal fade" id="deleteUserModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Избриши сметка</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Дали сте сигурни дека сакате да ја избришете сметката на <strong id="deleteUserTargetName"></strong>?</p>
+                <form id="deleteUserForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="deleteUserId" value="0" />
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Откажи</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteUser()">Избриши</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const resetModal = new bootstrap.Modal(document.getElementById('resetModal'));
+    const deleteUserModal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+
+    function openResetModal(userId, username) {
+        document.getElementById('resetUserId').value = userId;
+        document.getElementById('resetTargetName').textContent = username;
+        document.getElementById('newPassword').value = '';
+        document.getElementById('newPassword').classList.remove('is-invalid', 'is-valid');
+        document.getElementById('resetFormErrors').classList.add('d-none');
+        resetModal.show();
+    }
+
+    function confirmReset() {
+        const password = document.getElementById('newPassword');
+        if (password.value.length < 6) {
+            password.classList.add('is-invalid');
+            return;
+        }
+        password.classList.remove('is-invalid');
+
+        const token = document.querySelector('#resetForm input[name="__RequestVerificationToken"]').value;
+        const data = {
+            UserId: document.getElementById('resetUserId').value,
+            NewPassword: password.value,
+            __RequestVerificationToken: token
+        };
+
+        $.post('/Users/ResetPassword', data)
+            .done(function() {
+                resetModal.hide();
+                alert('Лозинката е успешно ресетирана.');
+            })
+            .fail(function(xhr) {
+                const errDiv = document.getElementById('resetFormErrors');
+                errDiv.innerHTML = xhr.responseJSON?.errors?.join('<br>') || 'Грешка при ресетирање.';
+                errDiv.classList.remove('d-none');
+            });
+    }
+
+    function deleteUser(id, username) {
+        document.getElementById('deleteUserId').value = id;
+        document.getElementById('deleteUserTargetName').textContent = username;
+        deleteUserModal.show();
+    }
+
+    function confirmDeleteUser() {
+        const id = document.getElementById('deleteUserId').value;
+        const token = document.querySelector('#deleteUserForm input[name="__RequestVerificationToken"]').value;
+
+        $.post('/Users/Delete', { id: id, __RequestVerificationToken: token })
+            .done(function() {
+                deleteUserModal.hide();
+                $(`#user-row-${id}`).fadeOut(300, function() { $(this).remove(); });
+            })
+            .fail(function() {
+                alert('Грешка при бришење на сметката.');
+            });
+    }
+</script>
+}

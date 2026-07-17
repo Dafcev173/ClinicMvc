@@ -13,3 +13,43 @@ body {
 .table td {
     vertical-align: middle;
 }
+
+/* Home page hero banner */
+.hero-banner {
+    background: linear-gradient(135deg, #212529 0%, #2c3e50 100%);
+    color: #fff;
+    padding: 3rem 2.5rem;
+    border-radius: 0.75rem;
+}
+
+/* Quick access cards on Home page */
+.quick-link-card {
+    display: block;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    height: 100%;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.quick-link-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+    border-color: #ced4da;
+    color: inherit;
+}
+
+.quick-link-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin: 0 auto;
+}

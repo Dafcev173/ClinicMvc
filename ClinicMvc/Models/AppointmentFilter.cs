@@ -89,4 +89,7 @@ public class AppointmentIndexViewModel
 {
     public AppointmentFilter Filter { get; set; } = new();
     public List<SelectListItem> Specialties { get; set; } = new();
+
+    /// <summary>Активни доктори - се користи за dropdown-от во панелот за слободни термини.</summary>
+    public List<SelectListItem> Doctors { get; set; } = new();
 }

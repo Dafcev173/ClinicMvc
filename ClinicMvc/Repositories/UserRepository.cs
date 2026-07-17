@@ -90,4 +90,15 @@ public class UserRepository : IUserRepository
         const string sql = "DELETE FROM USERS WHERE ID = @Id";
         await connection.ExecuteAsync(sql, new { Id = id });
     }
+
+    public async Task UpdatePasswordAsync(int id, string newPasswordHash, string modifiedBy)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"UPDATE USERS SET
+                                PASSWORDHASH = @PasswordHash,
+                                MODIFIEDON   = CURRENT_TIMESTAMP,
+                                MODIFIEDBY   = @ModifiedBy
+                              WHERE ID = @Id";
+        await connection.ExecuteAsync(sql, new { Id = id, PasswordHash = newPasswordHash, ModifiedBy = modifiedBy });
+    }
 }

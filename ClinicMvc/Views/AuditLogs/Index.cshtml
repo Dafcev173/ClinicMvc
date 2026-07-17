@@ -4,7 +4,7 @@
     ViewData["Title"] = "Audit Logs";
 }
 
-<h2 class="mb-3">📋 Логови на активности</h2>
+<h2 class="mb-3">Логови на активности</h2>
 
 <table class="table table-striped table-bordered">
     <thead class="table-dark">
@@ -38,3 +38,33 @@
         }
     </tbody>
 </table>
+
+@{
+    var pagination = (PaginationInfo)ViewBag.Pagination;
+    var isFirstPage = pagination.CurrentPage <= 1;
+    var isLastPage  = pagination.CurrentPage >= pagination.TotalPages;
+}
+
+<nav class="d-flex justify-content-between align-items-center mt-3">
+    @if (isFirstPage)
+    {
+        <span class="btn btn-outline-secondary btn-sm disabled">Претходна</span>
+    }
+    else
+    {
+        <a asp-action="Index" asp-route-page="@(pagination.CurrentPage - 1)" class="btn btn-outline-secondary btn-sm">Претходна</a>
+    }
+
+    <span class="text-muted">
+        Страна @pagination.CurrentPage од @pagination.TotalPages (@pagination.TotalCount вкупно)
+    </span>
+
+    @if (isLastPage)
+    {
+        <span class="btn btn-outline-secondary btn-sm disabled">Следна</span>
+    }
+    else
+    {
+        <a asp-action="Index" asp-route-page="@(pagination.CurrentPage + 1)" class="btn btn-outline-secondary btn-sm">Следна</a>
+    }
+</nav>

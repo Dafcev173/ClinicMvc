@@ -36,4 +36,25 @@ public class AuditLogRepository : IAuditLogRepository
                               ORDER BY LOGDATETIME DESC";
         return await connection.QueryAsync<AuditLog>(sql);
     }
+
+    public async Task<IEnumerable<AuditLog>> GetPagedAsync(int page, int pageSize)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var validPage = page < 1 ? 1 : page;
+        var skip = (validPage - 1) * pageSize;
+
+        // Firebird синтакса: FIRST/SKIP оди веднаш по SELECT
+        const string sql = @"SELECT FIRST @PageSize SKIP @Skip
+                                ID, ACTIONTYPE, ENTITYNAME, ENTITYID, USERNAME, LOGDATETIME, DESCRIPTION
+                              FROM AUDITLOGS
+                              ORDER BY LOGDATETIME DESC";
+        return await connection.QueryAsync<AuditLog>(sql, new { PageSize = pageSize, Skip = skip });
+    }
+
+    public async Task<int> CountAsync()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = "SELECT COUNT(*) FROM AUDITLOGS";
+        return await connection.ExecuteScalarAsync<int>(sql);
+    }
 }

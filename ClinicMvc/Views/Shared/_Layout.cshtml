@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Клиника</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="~/css/site.css" />
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3">
-        <a class="navbar-brand" asp-controller="Home" asp-action="Index">🏥 Клиника</a>
+        <a class="navbar-brand" asp-controller="Home" asp-action="Index">Клиника</a>
         <div class="navbar-nav ms-3 flex-grow-1">
             @* Линковите се прикажуваат само ако е најавен соодветна улога *@
             @if (User.IsInRole("Administrator"))
@@ -18,6 +19,7 @@
                 <a class="nav-link" asp-controller="Patients" asp-action="Index">Пациенти</a>
                 <a class="nav-link" asp-controller="Appointments" asp-action="Index">Термини</a>
                 <a class="nav-link" asp-controller="AuditLogs" asp-action="Index">Логови</a>
+                <a class="nav-link" asp-controller="Users" asp-action="Index">Корисници</a>
             }
             @if (User.IsInRole("Doctor"))
             {
@@ -25,17 +27,13 @@
                 <a class="nav-link" asp-controller="Appointments" asp-action="Index">Мои термини</a>
                 <a class="nav-link" asp-controller="Patients" asp-action="Index">Пациенти</a>
             }
-            @if (User.Identity?.IsAuthenticated == true)
-            {
-                <a class="nav-link" asp-controller="FreeSlots" asp-action="Index">Слободни термини</a>
-            }
         </div>
 
         @* Прикажи "Најави се" или "Одјава" зависно од состојбата *@
         @if (User.Identity?.IsAuthenticated == true)
         {
             <span class="text-white me-3">
-                👤 @User.Identity!.Name
+                @User.Identity!.Name
                 <span class="badge bg-secondary">@User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</span>
             </span>
             <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">

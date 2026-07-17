@@ -6,4 +6,10 @@ public interface IAuditLogRepository
 {
     Task LogAsync(string actionType, string entityName, int entityId, string username, string? description = null);
     Task<IEnumerable<AuditLog>> GetAllAsync();
+
+    /// <summary>Странирана листа на логови, најнови прво. page почнува од 1.</summary>
+    Task<IEnumerable<AuditLog>> GetPagedAsync(int page, int pageSize);
+
+    /// <summary>Вкупен број записи - потребен за пресметка на бројот на страници.</summary>
+    Task<int> CountAsync();
 }

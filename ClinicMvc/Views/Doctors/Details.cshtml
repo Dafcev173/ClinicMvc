@@ -24,7 +24,7 @@
 
     <div class="col-md-8">
         <div class="card">
-            <div class="card-header bg-dark text-white">📅 Денешни термини</div>
+            <div class="card-header bg-dark text-white">Денешни термини</div>
             <div class="card-body">
                 @if (!schedule.Any())
                 {
@@ -47,4 +47,5 @@
     </div>
 </div>
 
-<a asp-action="Index" class="btn btn-secondary mt-3">← Назад</a>
+<a asp-action="Index" class="btn btn-secondary mt-3">Назад</a>
+<a asp-action="DailySchedule" asp-route-id="@Model.Id" class="btn btn-outline-dark mt-3">Дневен распоред</a>

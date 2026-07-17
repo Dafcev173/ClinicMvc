@@ -9,8 +9,8 @@ namespace ClinicMvc.Controllers;
 
 /// <summary>
 /// Контролер за управување со термини.
-/// Достапен за Administrator (гледа сè) и Doctor (гледа само свои термини -
-/// рестрикцијата се применува автоматски преку ApplyDoctorRestriction()).
+/// Ги повикува Services слојот за бизнис логика (валидации, конфликти, извоз) -
+/// самиот контролер само ги обликува HTTP одговорите.
 /// </summary>
 [Authorize(Roles = "Administrator,Doctor")]
 public class AppointmentsController : Controller
@@ -18,7 +18,8 @@ public class AppointmentsController : Controller
     private readonly IAppointmentRepository _appointmentRepository;
     private readonly IDoctorRepository      _doctorRepository;
     private readonly IPatientRepository     _patientRepository;
-    private readonly IAuditLogRepository    _auditLogRepository;
+    private readonly IAppointmentService    _appointmentService;
+    private readonly IExportService         _exportService;
     private readonly ICurrentUserService    _currentUser;
 
     private static readonly string[] StatusOptions =
@@ -28,21 +29,18 @@ public class AppointmentsController : Controller
         IAppointmentRepository appointmentRepository,
         IDoctorRepository      doctorRepository,
         IPatientRepository     patientRepository,
-        IAuditLogRepository    auditLogRepository,
+        IAppointmentService    appointmentService,
+        IExportService         exportService,
         ICurrentUserService    currentUser)
     {
         _appointmentRepository = appointmentRepository;
         _doctorRepository      = doctorRepository;
         _patientRepository     = patientRepository;
-        _auditLogRepository    = auditLogRepository;
+        _appointmentService    = appointmentService;
+        _exportService         = exportService;
         _currentUser           = currentUser;
     }
 
-    /// <summary>
-    /// Ако најавениот корисник е Doctor - го поставува RestrictToDoctorId
-    /// за да гледа само свои термини. Администраторите не се ограничени.
-    /// Оваа проверка е СЕРВЕРСКА - не зависи од UI, значи не може да се заобиколи.
-    /// </summary>
     private void ApplyDoctorRestriction(AppointmentFilter filter)
     {
         if (_currentUser.IsDoctor && _currentUser.DoctorId.HasValue)
@@ -53,12 +51,14 @@ public class AppointmentsController : Controller
 
     public async Task<IActionResult> Index()
     {
-        var specialties = await _doctorRepository.GetSpecialtiesAsync();
+        var specialties  = await _doctorRepository.GetSpecialtiesAsync();
+        var activeDoctors = (await _doctorRepository.GetAllAsync()).Where(d => d.IsActive);
 
         var vm = new AppointmentIndexViewModel
         {
             Filter      = new AppointmentFilter(),
-            Specialties = specialties.Select(s => new SelectListItem(s, s)).ToList()
+            Specialties = specialties.Select(s => new SelectListItem(s, s)).ToList(),
+            Doctors     = activeDoctors.Select(d => new SelectListItem(d.FullName, d.Id.ToString())).ToList()
         };
 
         return View(vm);
@@ -105,7 +105,6 @@ public class AppointmentsController : Controller
         var appointment = await _appointmentRepository.GetByIdAsync(id);
         if (appointment == null) return NotFound();
 
-        // Доктор смее да гледа само сопствени термини (дури и преку директен ID повик)
         if (_currentUser.IsDoctor && appointment.DoctorId != _currentUser.DoctorId)
             return Forbid();
 
@@ -119,7 +118,6 @@ public class AppointmentsController : Controller
         var patients   = await _patientRepository.GetAllAsync();
         var activeDoctors = allDoctors.Where(d => d.IsActive);
 
-        // Доктор-корисник смее да закажува термини само за себе - dropdown-от се стеснува
         if (_currentUser.IsDoctor && _currentUser.DoctorId.HasValue)
         {
             activeDoctors = activeDoctors.Where(d => d.Id == _currentUser.DoctorId.Value);
@@ -137,30 +135,12 @@ public class AppointmentsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(Appointment appointment)
     {
-        // Доктор смее да закажува само за себе - дури и ако некој манипулира со request-от
         if (_currentUser.IsDoctor && appointment.DoctorId != _currentUser.DoctorId)
             return Forbid();
 
-        var doctor = await _doctorRepository.GetByIdAsync(appointment.DoctorId);
-        if (doctor == null || !doctor.IsActive)
-            ModelState.AddModelError("DoctorId", "Избраниот лекар не е активен.");
-
-        if (appointment.AppointmentDate.Date < DateTime.Today)
-            ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
-
-        if (await _appointmentRepository.HasConflictAsync(
-                appointment.DoctorId, appointment.AppointmentDate, appointment.AppointmentTime))
-            ModelState.AddModelError("AppointmentTime", "Докторот веќе има термин во тоа датум и време.");
-
-        if (!ModelState.IsValid)
-        {
-            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+        var (success, _, errors) = await _appointmentService.CreateAppointmentAsync(appointment, _currentUser.Username);
+        if (!success)
             return BadRequest(new { success = false, errors });
-        }
-
-        var newId = await _appointmentRepository.CreateAsync(appointment, _currentUser.Username);
-        await _auditLogRepository.LogAsync("CREATE", "Appointment", newId, _currentUser.Username,
-            $"Закажан термин за {appointment.AppointmentDate:dd.MM.yyyy} {appointment.AppointmentTime}");
 
         return Ok(new { success = true });
     }
@@ -172,39 +152,19 @@ public class AppointmentsController : Controller
         if (_currentUser.IsDoctor && appointment.DoctorId != _currentUser.DoctorId)
             return Forbid();
 
-        var doctor = await _doctorRepository.GetByIdAsync(appointment.DoctorId);
-        if (doctor == null || !doctor.IsActive)
-            ModelState.AddModelError("DoctorId", "Избраниот лекар не е активен.");
-
-        if (appointment.AppointmentDate.Date < DateTime.Today)
-            ModelState.AddModelError("AppointmentDate", "Не може да се закаже термин за минат датум.");
-
-        if (await _appointmentRepository.HasConflictAsync(
-                appointment.DoctorId, appointment.AppointmentDate,
-                appointment.AppointmentTime, appointment.Id))
-            ModelState.AddModelError("AppointmentTime", "Докторот веќе има термин во тоа датум и време.");
-
-        if (!ModelState.IsValid)
-        {
-            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+        var (success, errors) = await _appointmentService.UpdateAppointmentAsync(appointment, _currentUser.Username);
+        if (!success)
             return BadRequest(new { success = false, errors });
-        }
-
-        await _appointmentRepository.UpdateAsync(appointment, _currentUser.Username);
-        await _auditLogRepository.LogAsync("UPDATE", "Appointment", appointment.Id, _currentUser.Username,
-            "Изменет термин");
 
         return Ok(new { success = true });
     }
 
-    /// <summary>Само Administrator смее да брише термини.</summary>
     [Authorize(Roles = "Administrator")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id)
     {
-        await _appointmentRepository.DeleteAsync(id, _currentUser.Username);
-        await _auditLogRepository.LogAsync("DELETE", "Appointment", id, _currentUser.Username, "Soft delete на термин");
+        await _appointmentService.DeleteAppointmentAsync(id, _currentUser.Username);
         return Ok(new { success = true });
     }
 
@@ -219,11 +179,9 @@ public class AppointmentsController : Controller
         if (_currentUser.IsDoctor && appointment.DoctorId != _currentUser.DoctorId)
             return Forbid();
 
-        if (appointment.Status != "Zakazan")
-            return BadRequest(new { success = false, errors = new[] { "Прегледот може да започне само за закажани термини." } });
-
-        await _appointmentRepository.UpdateStatusAsync(id, "Vo tek", _currentUser.Username);
-        await _auditLogRepository.LogAsync("UPDATE", "Appointment", id, _currentUser.Username, "Почеток на преглед");
+        var (success, errors) = await _appointmentService.StartExamAsync(id, _currentUser.Username);
+        if (!success)
+            return BadRequest(new { success = false, errors });
 
         return Ok(new { success = true });
     }
@@ -239,12 +197,77 @@ public class AppointmentsController : Controller
         if (_currentUser.IsDoctor && appointment.DoctorId != _currentUser.DoctorId)
             return Forbid();
 
-        if (appointment.Status != "Vo tek")
-            return BadRequest(new { success = false, errors = new[] { "Прегледот може да заврши само ако е во тек." } });
-
-        await _appointmentRepository.UpdateStatusAsync(id, "Zavrsen", _currentUser.Username, notes);
-        await _auditLogRepository.LogAsync("UPDATE", "Appointment", id, _currentUser.Username, "Завршување на преглед");
+        var (success, errors) = await _appointmentService.FinishExamAsync(id, notes, _currentUser.Username);
+        if (!success)
+            return BadRequest(new { success = false, errors });
 
         return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// GET: /Appointments/ExportExcel
+    /// Ги извезува термините кои одговараат на тековните филтри во Excel датотека.
+    /// Не се применува пагинација - извозот ги содржи сите филтрирани записи.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> ExportExcel(AppointmentFilter filter)
+    {
+        ApplyDoctorRestriction(filter);
+        filter.Page = 1;
+
+        var appointments = await GetAllFilteredAsync(filter);
+        var fileBytes = _exportService.ExportAppointmentsToExcel(appointments);
+
+        return File(fileBytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"termini_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+    }
+
+    /// <summary>GET: /Appointments/ExportPdf - извоз на филтрираните термини во PDF.</summary>
+    [HttpGet]
+    public async Task<IActionResult> ExportPdf(AppointmentFilter filter)
+    {
+        ApplyDoctorRestriction(filter);
+        filter.Page = 1;
+
+        var appointments = await GetAllFilteredAsync(filter);
+        var fileBytes = _exportService.ExportAppointmentsToPdf(appointments);
+
+        return File(fileBytes, "application/pdf", $"termini_{DateTime.Now:yyyyMMdd_HHmmss}.pdf");
+    }
+
+    /// <summary>
+    /// Ги вчитува СИТЕ записи (без пагинација) кои одговараат на филтрите - за извоз.
+    /// Го користи истиот SearchAsync, но со голем PageSize за да ги земе сите одеднаш.
+    /// </summary>
+    private async Task<IEnumerable<Appointment>> GetAllFilteredAsync(AppointmentFilter filter)
+    {
+        var totalCount = await _appointmentRepository.CountAsync(filter);
+        var exportFilter = new AppointmentFilter
+        {
+            PatientFirstName   = filter.PatientFirstName,
+            PatientLastName    = filter.PatientLastName,
+            PatientEmbg        = filter.PatientEmbg,
+            DoctorName         = filter.DoctorName,
+            Specialty          = filter.Specialty,
+            Date               = filter.Date,
+            SortBy             = filter.SortBy,
+            SortDirection      = filter.SortDirection,
+            RestrictToDoctorId = filter.RestrictToDoctorId,
+            Page               = 1
+        };
+
+        // SearchAsync секогаш странира според AppointmentFilter.PageSize (10) - за извоз
+        // го читаме сето со повторни повици наместо да менуваме постојана константа.
+        var all = new List<Appointment>();
+        var pages = (int)Math.Ceiling(totalCount / (double)AppointmentFilter.PageSize);
+        for (var page = 1; page <= Math.Max(pages, 1); page++)
+        {
+            exportFilter.Page = page;
+            var pageItems = await _appointmentRepository.SearchAsync(exportFilter);
+            all.AddRange(pageItems);
+        }
+
+        return all;
     }
 }

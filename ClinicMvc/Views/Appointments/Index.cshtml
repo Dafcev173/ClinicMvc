@@ -4,10 +4,14 @@
     ViewData["Title"] = "Термини";
 }
 
-@* Наслов и копче за додавање нов термин *@
+@* Наслов и копчиња за акции *@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>Термини</h2>
-    <button class="btn btn-primary" onclick="openCreateModal()">+ Нов термин</button>
+    <div class="d-flex gap-2">
+        <a id="exportExcelBtn" href="#" class="btn btn-outline-success btn-sm">Export Excel</a>
+        <a id="exportPdfBtn" href="#" class="btn btn-outline-danger btn-sm">Export PDF</a>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Нов термин</button>
+    </div>
 </div>
 
 @* ══════════════════ Dashboard приказ - два столба ══════════════════ *@
@@ -25,7 +29,7 @@
 
         @* Картичка со филтри за пребарување *@
         <div class="card card-body">
-            <h6 class="mb-3">🔍 Филтри</h6>
+            <h6 class="mb-3">Филтри</h6>
 
             <div class="mb-2">
                 <label class="form-label small">Ime на пациент</label>
@@ -73,8 +77,8 @@
         </div>
     </div>
 
-    @* ─────────── Десна страна (col-md-9): Сортирање + Табела + Пагинација ─────────── *@
-    <div class="col-md-9">
+    @* ─────────── Средина (col-md-6): Сортирање + Табела + Пагинација ─────────── *@
+    <div class="col-md-6">
 
         @* Контроли за сортирање, поставени над табелата *@
         <div class="d-flex justify-content-end align-items-center mb-2 gap-2">
@@ -88,12 +92,14 @@
             </select>
             <button type="button" id="sortDirectionBtn" class="btn btn-outline-secondary btn-sm"
                     onclick="toggleSortDirection()" title="Смени насока на сортирање">
-                ↑ Растечки
+                Растечки
             </button>
         </div>
 
-        @* Контејнер каде AJAX ја вчитува табелата со термини (постоечкиот Partial View) *@
-        <div id="tableContainer">
+        @* Контејнер каде AJAX ја вчитува табелата со термини (постоечкиот Partial View).
+           table-responsive овозможува хоризонтално скролање наместо преклопување
+           со панелот за слободни термини кога табелата е преширока за колоната. *@
+        <div id="tableContainer" class="table-responsive">
             <div class="text-center py-4">
                 <div class="spinner-border text-primary"></div>
                 <p class="mt-2">Се вчитува...</p>
@@ -102,6 +108,43 @@
 
         @* Контејнер за пагинација - под табелата *@
         <div id="paginationContainer"></div>
+    </div>
+
+    @* ─────────── Десна страна (col-md-3): Слободни термини ─────────── *@
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header bg-dark text-white">Слободни термини</div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <label class="form-label small">Лекар</label>
+                    <select id="slotsFilterDoctor" class="form-select form-select-sm">
+                        <option value="">-- Сите активни лекари --</option>
+                        @foreach (var d in Model.Doctors)
+                        {
+                            <option value="@d.Value">@d.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Специјалност</label>
+                    <select id="slotsFilterSpecialty" class="form-select form-select-sm">
+                        <option value="">-- Сите --</option>
+                        @foreach (var s in Model.Specialties)
+                        {
+                            <option value="@s.Value">@s.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Датум</label>
+                    <input type="date" id="slotsFilterDate" class="form-control form-control-sm" />
+                </div>
+
+                <div id="slotsContainer">
+                    <p class="text-muted small mb-0">Изберете датум за да ги видите слободните термини.</p>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -288,12 +331,20 @@
         });
     }
 
+    // ── Ажурирање на линковите за извоз според тековните филтри ─────────
+    function updateExportLinks() {
+        const params = new URLSearchParams(getFilterParams()).toString();
+        document.getElementById('exportExcelBtn').href = '/Appointments/ExportExcel?' + params;
+        document.getElementById('exportPdfBtn').href   = '/Appointments/ExportPdf?' + params;
+    }
+
     // ── Комбинирано освежување: табела + пагинација + статистика ───────
     // Се повикува при промена на филтри или сортирање (сите три треба да се синхронизирани)
     function refreshAll() {
         loadTable();
         loadPagination();
         loadStatistics();
+        updateExportLinks();
     }
 
     // ── Комбинирано освежување само на табела + пагинација ──────────────
@@ -301,6 +352,7 @@
     function refreshTableOnly() {
         loadTable();
         loadPagination();
+        updateExportLinks();
     }
 
     // ── Смена на страница преку копчињата Претходна/Следна ──────────────
@@ -350,7 +402,7 @@
     function toggleSortDirection() {
         sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
         const btn = document.getElementById('sortDirectionBtn');
-        btn.textContent = sortDirection === 'asc' ? '↑ Растечки' : '↓ Опаѓачки';
+        btn.textContent = sortDirection === 'asc' ? 'Растечки' : 'Опаѓачки';
         currentPage = 1;
         refreshTableOnly();
     }
@@ -363,7 +415,39 @@
         });
         // Прикажи ги термините, статистиката и пагинацијата при прво отворање
         refreshAll();
+
+        // Слободни термини - постави го денешниот датум по default и вчитај
+        $('#slotsFilterDate').val(new Date().toISOString().split('T')[0]);
+        loadFreeSlots();
     });
+
+    // ── Панел за слободни термини (десна страна) ─────────────────────────
+    // Го користи веќе постоечкиот /FreeSlots/LoadSlots endpoint и Partial View
+    function loadFreeSlots() {
+        const date = $('#slotsFilterDate').val();
+
+        if (!date) {
+            $('#slotsContainer').html('<p class="text-muted small mb-0">Изберете датум за да ги видите слободните термини.</p>');
+            return;
+        }
+
+        const params = {
+            DoctorId:  $('#slotsFilterDoctor').val(),
+            Specialty: $('#slotsFilterSpecialty').val(),
+            Date:      date
+        };
+
+        $('#slotsContainer').html(`
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+            </div>`);
+
+        $.get('/FreeSlots/LoadSlots', params, function(html) {
+            $('#slotsContainer').html(html);
+        });
+    }
+
+    $('#slotsFilterDoctor, #slotsFilterSpecialty, #slotsFilterDate').on('change', loadFreeSlots);
 
     // ── Полнење на dropdown-ите во Create/Edit модалот ──────────────────
     function fillDropdowns(selectedDoctorId, selectedPatientId, selectedStatus) {
